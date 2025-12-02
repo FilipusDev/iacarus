@@ -1,0 +1,253 @@
+# 🦅 IaCarus: The One Person Infrastructure
+
+**IaCarus** is a minimalist, script-based Infrastructure as Code (IaC) toolkit
+inspired by the "The One Person Framework" [article](https://world.hey.com/dhh/the-one-person-framework-711e6318).
+
+Please read this `README` from top to bottom. (Yes, really 😅).
+If you prefer debugging for 2 hours to save 5 minutes of reading -> go to [TL;DR](#🦥-tldr).
+
+As of now (`v0.1.0`) it automates the provisioning of hardened **Hetzner VPS**
+servers, and **Cloudflare R2** storage buckets using simple Bash scripts and Makefiles.
+
+## 🦥 TL;DR
+
+1. **Setup:**
+
+   ```bash
+   ./setup.sh
+   # Edit .env with your API tokens
+   ```
+
+2. **Create a Server (Hetzner):**
+
+   ```bash
+   cd hetzner
+   make vps-new      # Provision a hardened VPS
+   make vps-list     # See your fleet
+   ssh hetzner-vps-1 # Log in (Aliases auto-configured)
+   ```
+
+3. **Create Storage (Cloudflare R2):**
+
+   ```bash
+   cd cloudflare
+   make bucket-new   # Interactive creation
+   make bucket-list  # View buckets
+   ```
+
+## 🌐 Accounts
+
+Yes, I know, this "stack" isn't free... BUT, it's extremely cheap.
+The Hetzner Box configured by default (CAX11) is the cheapest one.
+We're talking about 6 bucks (USD) cheap. Per VPS!
+
+As of now (`v0.1.0`) you'll need 2 accounts a Hetzner one and a Cloudflare one.
+
+At Hetzner, we'll manage server boxes (VPS).
+At Cloudflare, we'll manage Zero Trust tunnels and R2 storage buckets.
+
+### Hetzner
+
+You'll need to create an account at <https://www.hetzner.com>.
+The process is pretty straight forward.
+
+During the process you'll need to provide a payment method.
+
+Also, you might need to go through an id verification process, providing selfies
+and document photos.
+
+### Cloudflare
+
+You'll need to create an account at <https://www.cloudflare.com>.
+The process is (also) pretty straight forward.
+
+During the process you might need to provide a payment method.
+
+## 🏗️ Architecture
+
+### The Box (Hetzner)
+
+- **OS:** Ubuntu 24.04 (Arm64/CAX11)
+- **Security:** \* **Zero Open Ports:** All ingress ports (80/443) are BLOCKED by default.
+  - **SSH:** Custom randomized port (1022-60022), Key-only auth, Root disabled.
+  - **Networking:** Ingress handled via **Cloudflare Tunnel** (Reverse Proxy).
+- **Automation:** Auto-increments server names (`vps-1`, `vps-2`), manages `~/.ssh/config` automatically.
+- **Safety:** Destruction requires manual confirmation typing.
+
+### The Storage (Cloudflare R2)
+
+- **S3 Compatible:** Uses AWS CLI under the hood.
+- **Idempotent:** Scripts check for existence before creating.
+- **Safety:** Destruction requires manual confirmation typing.
+
+## 🧩 Dependencies
+
+1. At this point you must be using some Linux distro.
+   If not, I don't know what to say...
+
+2. **hcloud:** the cli interface for Hetzner Cloud. [Doc here](https://github.com/hetznercloud/cli).
+
+3. **aws:** the cli interface for AWS Services. [Doc here](https://github.com/aws/aws-cli).
+
+   > No AWS Account required.
+   > We use the AWS CLI strictly as a client to interact
+   > with Cloudflare R2's S3-compatible API.
+
+4. **make:** pretty standard.
+
+## 📝 Configuration
+
+Copy `example.env` to `.env` and fill with your configuration secrets.
+
+### SSH Keys
+
+⚠ IaCarus assume the path `~` ($HOME) to setup and clean the following:
+
+- `config` file, that holds the ssh connection configuration.
+- `known_hosts` file, that holds the trusted ssh hosts.
+
+If you have another "pattern" on your system, setup the SSH_HOME_PATH:
+
+```env
+SSH_HOME_PATH=$HOME/.ssh
+```
+
+1. if you need to generate a new key pair:
+
+`ssh-keygen -t ed25519 -f ~/.ssh/key-name -C "comment-to-identify-the-key"`
+
+OR
+
+`ssh-keygen -t ed25519 -f <whatever-you-set-on_SSH_HOME_PATH>/key-name -C "comment-to-identify-the-key"`
+
+2. if not, you could use one of your ssh keys.
+
+```env
+SSH_KEY_PATH=$SSH_HOME_PATH/key-name
+SSH_PUBLIC_KEY_PATH=${SSH_KEY_PATH}.pub
+SSH_PRIVATE_KEY_PATH=${SSH_KEY_PATH}
+```
+
+### Cloudflare
+
+For the next steps you might need to provide a valid international credit card,
+despite the generous free tier, the Zero Trust and R2 Storage have paid features.
+
+#### CLOUDFLARE ZERO TRUST TUNNEL
+
+1. Access your cloudflare account: <https://dash.cloudflare.com>
+2. Go to "Zero Trust" (under 'PROTECT & CONNECT' menu group).
+3. Go to "Connectors" (under 'Networks' menu group).
+4. Click on "+ Create a tunnel" button.
+5. Choose "Cloudflared" by clicking on "Select Cloudflared".
+6. Give it a "Name" and click the "Save tunnel" button.
+7. In the "Configure", under "Choose your environment" hit "Docker".
+8. Copy the docker command under "Install and run a connector".
+9. Only the token is needed, looks like: eyJhIjoiMjg3YTUyNDAyZG...
+
+In the `.env` fill the variables:
+
+```env
+# a cloudflare tunnel to use for smoke test!
+CF_TUNNEL_SMOKE_TEST_TOKEN=
+
+# one (or more) cloudflare tunnel(s) - one for each VPS!
+CF_TUNNEL_TOKEN=
+```
+
+#### CLOUDFLARE R2 STORAGE
+
+1. Access your cloudflare account: <https://dash.cloudflare.com>
+2. Go to "Overview" (under 'BUILD' > 'Storage & Databases' >
+   'R2 object storage' menu group).
+   > You might need click a "Create R2 Account"-like button).
+3. Click on "{ } Manage" buton on "API Tokens" ('Account Details' session).
+4. Click on "Create Account API token" button.
+5. Give it a "Name".
+6. Select "Admin Read & Write" under "Permissions".
+7. Leave the "TTL" as "Forever" (or select it).
+8. Optional, but recommended, configure the "Client IP Address Filtering".
+9. Hit the "Create Account API Token".
+
+In the `.env` fill the variables:
+
+```env
+# cloudflare R2 storage tokens
+
+#  10. this info is either with the #12 or in the "Overview" page
+#      (under 'Account Details' session)
+CF_R2_ACCOUNT_ID=
+
+#  11. copy the value under "Token value" label.
+CF_R2_TOKEN=
+
+# cloudflare R2 storage tokens : S3 interface
+
+#  12. check this value under "Use jurisdiction-specific endpoints
+#      for S3 clients:" label or in the "Overview" page
+#      (under 'Account Details' session)
+CF_R2_S3_CLIENT_URL=https://${CF_R2_ACCOUNT_ID}.r2.cloudflarestorage.com
+
+#  13. copy the value under "Access Key ID" label.
+CF_R2_S3_CLIENT_ACCESS_KEY_ID=
+
+#  14. copy the value under "Secret Access Key" label.
+CF_R2_S3_CLIENT_SECRET_ACCESS_KEY=
+
+```
+
+## 🛠️ Toolkit Usage
+
+Well... first things first: `git clone https://github.com/FilipusDev/iacarus.git`.
+
+Then, `cd iacarus`.
+
+Once there, let's run a good `make`! This will pops a very nice message:
+
+```sh
+iacarus main ❯ make
+
+🦅 IaCarus - CONTROL PLANE
+------------------------------------------------
+help                 Show this help message
+setup                Run the setup script
+hetzner              Enter Hetzner Control Plane
+cloudflare           Enter Cloudflare Control Plane
+```
+
+Run `make setup`.
+
+If you jump directly to here, you'll need to create the [Accounts](#🌐-accounts) required.
+Also, back to [Configuration](#📝-configuration) section to fill all needed secrets.
+
+After you perform all needed installations and configuration, you might see
+this satisfactory output:
+
+```sh
+iacarus main ❯ make setup
+
+🦅 IaCarus Setup Wizard
+----------------------------------------
+🔍 Checking dependencies...
+   ✅ Found: hcloud
+   ✅ Found: aws
+   ✅ Found: make
+
+📝 Configuration Setup...
+✅ .env already exists.
+
+📂 Verifying project structure...
+✅ Made scripts executable.
+
+🚀 Ready to fly!
+----------------------------------------
+1. Edit .env with your secrets.
+2. Go to 'hetzner/' to create servers:  cd hetzner && make new
+3. Go to 'cloudflare/' to manage R2:    cd cloudflare && make new
+----------------------------------------
+
+```
+
+Now, you may proceed to [Hetnzer README](./hetzner/README.md)
+
+Or to Cloudflare README.
