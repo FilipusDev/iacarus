@@ -6,7 +6,7 @@ inspired by the "The One Person Framework" [article](https://world.hey.com/dhh/t
 Please read this `README` from top to bottom. (Yes, really 😅).
 If you prefer debugging for 2 hours to save 5 minutes of reading -> go to [TL;DR](#🦥-tldr).
 
-As of now (`v0.1.0`) it automates the provisioning of hardened **Hetzner VPS**
+Currently (`v0.1.0`) it automates the provisioning of hardened **Hetzner VPS**
 servers, and **Cloudflare R2** storage buckets using simple Bash scripts and Makefiles.
 
 ## 🦥 TL;DR
@@ -41,7 +41,7 @@ Yes, I know, this "stack" isn't free... BUT, it's extremely cheap.
 The Hetzner Box configured by default (CAX11) is the cheapest one.
 We're talking about 6 bucks (USD) cheap. Per VPS!
 
-As of now (`v0.1.0`) you'll need 2 accounts a Hetzner one and a Cloudflare one.
+As of now (`v0.1.0`) you'll need 2 accounts: one for Hetzner and one for Cloudflare.
 
 At Hetzner, we'll manage server boxes (VPS).
 At Cloudflare, we'll manage Zero Trust tunnels and R2 storage buckets.
@@ -49,17 +49,17 @@ At Cloudflare, we'll manage Zero Trust tunnels and R2 storage buckets.
 ### Hetzner
 
 You'll need to create an account at <https://www.hetzner.com>.
-The process is pretty straight forward.
+The process is pretty straightforward.
 
 During the process you'll need to provide a payment method.
 
-Also, you might need to go through an id verification process, providing selfies
+Also, you might need to go through an ID verification process, providing selfies
 and document photos.
 
 ### Cloudflare
 
 You'll need to create an account at <https://www.cloudflare.com>.
-The process is (also) pretty straight forward.
+The process is (also) pretty straightforward.
 
 During the process you might need to provide a payment method.
 
@@ -72,28 +72,30 @@ During the process you might need to provide a payment method.
   - **SSH:** Custom randomized port (1022-60022), Key-only auth, Root disabled.
   - **Networking:** Ingress handled via **Cloudflare Tunnel** (Reverse Proxy).
 - **Automation:** Auto-increments server names (`vps-1`, `vps-2`), manages `~/.ssh/config` automatically.
-- **Safety:** Destruction requires manual confirmation typing.
+- **Safety:** Destruction requires manual confirmation by typing the resource name.
 
 ### The Storage (Cloudflare R2)
 
 - **S3 Compatible:** Uses AWS CLI under the hood.
 - **Idempotent:** Scripts check for existence before creating.
-- **Safety:** Destruction requires manual confirmation typing.
+- **Safety:** Destruction requires manual confirmation by typing the resource name.
 
 ## 🧩 Dependencies
 
 1. At this point you must be using some Linux distro.
    If not, I don't know what to say...
 
-2. **hcloud:** the cli interface for Hetzner Cloud. [Doc here](https://github.com/hetznercloud/cli).
+   ...this toolkit is designed for Linux environments.
 
-3. **aws:** the cli interface for AWS Services. [Doc here](https://github.com/aws/aws-cli).
+2. **hcloud:** the CLI interface for Hetzner Cloud. [Doc here](https://github.com/hetznercloud/cli).
+
+3. **aws:** the CLI interface for AWS Services. [Doc here](https://github.com/aws/aws-cli).
 
    > No AWS Account required.
    > We use the AWS CLI strictly as a client to interact
    > with Cloudflare R2's S3-compatible API.
 
-4. **make:** pretty standard.
+4. **make, nc:** pretty standard.
 
 ## 📝 Configuration
 
@@ -101,7 +103,7 @@ Copy `example.env` to `.env` and fill with your configuration secrets.
 
 ### SSH Keys
 
-⚠ IaCarus assume the path `~` ($HOME) to setup and clean the following:
+⚠ IaCarus assumes the path `~` ($HOME) to setup and clean the following:
 
 - `config` file, that holds the ssh connection configuration.
 - `known_hosts` file, that holds the trusted ssh hosts.
@@ -112,7 +114,7 @@ If you have another "pattern" on your system, setup the SSH_HOME_PATH:
 SSH_HOME_PATH=$HOME/.ssh
 ```
 
-1. if you need to generate a new key pair:
+1. If you need to generate a new key pair:
 
 `ssh-keygen -t ed25519 -f ~/.ssh/key-name -C "comment-to-identify-the-key"`
 
@@ -120,7 +122,7 @@ OR
 
 `ssh-keygen -t ed25519 -f <whatever-you-set-on_SSH_HOME_PATH>/key-name -C "comment-to-identify-the-key"`
 
-2. if not, you could use one of your ssh keys.
+2. If not, you could use one of your ssh keys.
 
 ```env
 SSH_KEY_PATH=$SSH_HOME_PATH/key-name
@@ -130,8 +132,8 @@ SSH_PRIVATE_KEY_PATH=${SSH_KEY_PATH}
 
 ### Cloudflare
 
-For the next steps you might need to provide a valid international credit card,
-despite the generous free tier, the Zero Trust and R2 Storage have paid features.
+For the next steps, you might need to provide a valid international credit card.
+Despite the generous free tier, Zero Trust and R2 Storage have paid features.
 
 #### CLOUDFLARE ZERO TRUST TUNNEL
 
@@ -161,7 +163,7 @@ CF_TUNNEL_TOKEN=
 2. Go to "Overview" (under 'BUILD' > 'Storage & Databases' >
    'R2 object storage' menu group).
    > You might need click a "Create R2 Account"-like button).
-3. Click on "{ } Manage" buton on "API Tokens" ('Account Details' session).
+3. Click on "{ } Manage" button on "API Tokens" ('Account Details' session).
 4. Click on "Create Account API token" button.
 5. Give it a "Name".
 6. Select "Admin Read & Write" under "Permissions".
@@ -202,7 +204,7 @@ Well... first things first: `git clone https://github.com/FilipusDev/iacarus.git
 
 Then, `cd iacarus`.
 
-Once there, let's run a good `make`! This will pops a very nice message:
+Once there, let's run a good `make`! This will pop up a very nice message:
 
 ```sh
 iacarus main ❯ make
@@ -217,7 +219,7 @@ cloudflare           Enter Cloudflare Control Plane
 
 Run `make setup`.
 
-If you jump directly to here, you'll need to create the [Accounts](#🌐-accounts) required.
+If you jumped directly to here, you'll need to create the [Accounts](#🌐-accounts) required.
 Also, back to [Configuration](#📝-configuration) section to fill all needed secrets.
 
 After you perform all needed installations and configuration, you might see
@@ -248,6 +250,6 @@ iacarus main ❯ make setup
 
 ```
 
-Now, you may proceed to [Hetnzer README](./hetzner/README.md)
+Now, you may proceed to [Hetzner README](./hetzner/README.md)
 
-Or to Cloudflare README.
+Or to [Cloudflare README](/cloudflare/README.md)

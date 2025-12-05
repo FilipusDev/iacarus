@@ -1,11 +1,11 @@
 # | ☁ HETZNER | 🦅 IaCarus
 
-From repo root: `cd hetzner`.
+Run from the repo root: `cd hetzner`.
 
 ### make vps-new
 
 `make vps-new` will **automatically provision a new server**.
-It simple runs the `iacarus/hetzner/vps-provision.sh` script.
+It simply runs the `iacarus/hetzner/vps-provision.sh` script.
 
 The server’s configuration is defined in: `iacarus/config.sh`:
 
@@ -23,10 +23,11 @@ VPS_ADMIN_USER="hzr-user"
 > TODO: include a tutorial to create a Hetzner Account with multiple
 > Project > Tokens > Contexts
 
-A new server will be created on the project defined by your `hcloud` token/context.
+A new server will be created in the project defined by your `hcloud` token/context.
 
 ```sh
 iacarus/hetzner main ❯ make vps-new
+
 🔍 Checking Pre-requisites...
 🖥  Target: hetzner-vps-1 | Port: ***22 | Region: hel1
 ☁️ Calling Hetzner API...
@@ -51,8 +52,8 @@ Stabilizing connection...
 ------------------------------------------------
 ```
 
-All SSH config is also automatically done, meaning `~/.ssh/config` file and
-`~/.ssh/known_hosts` file are backed-up and changed.
+SSH configuration is handled automatically: `~/.ssh/config` and
+`~/.ssh/known_hosts` are backed up and updated.
 
 ```sh
 iacarus/hetzner main ❯ cat ~/.ssh/config
@@ -75,7 +76,7 @@ iacarus/hetzner main ❯ cat ~/.ssh/known_hosts
 # (...)
 ```
 
-It's advised that you create/setup a Hetnzer Firewall (it's free!), with **ONLY**
+We strongly advise creating a Hetzner Firewall (it's free!), with **ONLY**
 one inbound rule, allowing connection **ONLY** from your "local IP"
 to the generated server SSH PORT.
 
@@ -83,11 +84,12 @@ to the generated server SSH PORT.
 
 ### make vps-list
 
-`make vps-new` will list all VPS created on the project defined
+`make vps-list` will list all VPS instances created on the project defined
 by your `hcloud` token/context.
 
 ```sh
 iacarus/hetzner main ❯ make vps-list
+
 🔍 Fetching server list...
 ID          NAME            IPV4           DATACENTER   STATUS
 ***2949     hetzner-vps-1   <IPv4-IP>      hel1-dc2     running
@@ -96,15 +98,16 @@ ID          NAME            IPV4           DATACENTER   STATUS
 ### make vps-down
 
 `make vps-down` will destroy a selected VPS.
-It simple runs the `iacarus/hetzner/vps-destroy.sh` script.
+It simply runs the `iacarus/hetzner/vps-destroy.sh` script.
 
-This script has a "Safety Lock" so that you need to type the VPS name
+This script includes a "Safety Lock" that requires you to type the VPS name
 you're trying to destroy.
 
 Also, it removes the configuration from `~/.ssh/config` file and `~/.ssh/known_hosts`.
 
 ```sh
 iacarus/hetzner main ❯ make vps-down
+
 🔍 Checking Pre-requisites...
 🔍 Fetching server list from Hetzner...
 Select a server:
@@ -122,28 +125,29 @@ Server ***785 deleted
 ✅ hetzner-vps-2 has been obliterated.
 ```
 
-### make vps-check-heath
+### make vps-check-health
 
-`make vps-check-heath` will run the `iacarus/hetzner/vps-health-check.sh` script.
+`make vps-check-health` will run the `iacarus/hetzner/vps-health-check.sh` script.
 
-The script will check several configurations that we "ask" Hetzner to do through
-the config file `./vps-user_data.yml.template`.
+The script will check several custom configurations requested via
+config file `./vps-user_data.yml.template`.
 
 - Check `cloud-init` status.
 - Check if the user has permission to run Docker.
 - Check if the server internal firewall `ufw` is:
   - running,
-  - allowing only 22-like ports incoming traffic.
+  - allowing incoming traffic only on SSH-related ports (22-like ports).
 - Check if `fail2ban` is running and prints the `Jails` configured.
 - Check the SSH Runtime config:
   - Root Login must be disabled,
   - Pass Auth must be disabled.
 - Check SSH config files:
-  - Only the `hardening.conf` must be there.
+  - Only `hardening.conf` should exist.
 - Check if the server needs a reboot - _a fresh server will always reboot!_
 
 ```sh
 iacarus/hetzner main ❯ make vps-check-heath
+
 🔍 Fetching server list from Hetzner...
 Select a server:
 1) ***949:hetzner-vps-1:<IPv4-IP>:running
@@ -184,7 +188,7 @@ Enter number (or 'q' to quit): 2
 
 ### make vps-smoke-tunnel
 
-This script assume that you've already created a Zero Trust Tunnel for smoke tests
+This script assumes you have already created a Zero Trust Tunnel for smoke tests
 and setup the `CF_TUNNEL_SMOKE_TEST_TOKEN` env variable.
 
 `make vps-smoke-tunnel` will run the `iacarus/hetzner/vps-cf-tunnel-smoke_test.sh` script.
@@ -194,6 +198,7 @@ and a `nginx` container.
 
 ```sh
 iacarus/hetzner main ❯ make vps-smoke-tunnel
+
 🔍 Checking Pre-requisites...
 🔍 Fetching server list from Hetzner...
 Select a server:
@@ -240,16 +245,17 @@ Press [Enter] to clean up and destroy test...
 
 > TODO: include a tutorial to create a `cloudflared` Tunnel.
 
-After that a message will pops up asking you to setup a route to reach the
-`nginx` app trough the `cloudflared` tunnel.
+A message will then appear asking you to setup a route to reach the
+`nginx` app through the `cloudflared` tunnel.
 
 ![cloudflare_cloudflared-tunnel_smoke-test_01.png](../doc/images/cloudflare_cloudflared-tunnel_smoke-test_01.png)
 
-If everything ran smoothly, you might see it accessing you configured (sub)domain.
+If everything ran smoothly, you should see it by accessing your configured
+(sub)domain.
 
 ![cloudflare_cloudflared-tunnel_smoke-test_02.png](../doc/images/cloudflare_cloudflared-tunnel_smoke-test_02.png)
 
-Hitting `Enter` and all smoke test resources, will be destroyed.
+Press `Enter` to destroy all smoke test resources.
 
 ```sh
 ----------------------------------------
