@@ -1,5 +1,7 @@
 # 🦅 IaCarus: The One Person Infrastructure
 
+![License](https://img.shields.io/github/license/FilipusDev/iacarus?style=flat-square&color=blue)
+
 **IaCarus** is a minimalist, script-based Infrastructure as Code (IaC) toolkit
 inspired by the "The One Person Framework" [article](https://world.hey.com/dhh/the-one-person-framework-711e6318).
 
@@ -253,3 +255,7 @@ iacarus main ❯ make setup
 Now, you may proceed to [Hetzner README](./hetzner/README.md)
 
 Or to [Cloudflare README](/cloudflare/README.md)
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
