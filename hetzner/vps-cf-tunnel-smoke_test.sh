@@ -4,7 +4,7 @@ source ../config.sh
 source ../utils.sh
 
 # 1. Check configuration variables availability
-echo -e "${C_INFO}🔍 Checking Pre-requisites...${C_RESET}"
+echo -e "\n${C_INFO}🔍 Checking Pre-requisites...${C_RESET}"
 if [ -z "$CF_TUNNEL_SMOKE_TEST_TOKEN" ]; then
     echo -e "${C_ERROR}❌ Error: Missing configuration variables.${C_RESET}"
     exit 1

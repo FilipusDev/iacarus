@@ -6,7 +6,7 @@ source ../config.sh
 source ../utils.sh
 
 # 1. Check configuration variables availability
-echo -e "${C_INFO}🔍 Checking Pre-requisites...${C_RESET}"
+echo -e "\n${C_INFO}🔍 Checking Pre-requisites...${C_RESET}"
 if [[ -z "$SSH_HOME_PATH" || -z "$SSH_PUBLIC_KEY_PATH" || -z "$SSH_PRIVATE_KEY_PATH" || -z "$VPS_BASE_NAME" || -z "$VPS_TYPE" || -z "$VPS_LOCATION" || -z "$VPS_IMAGE" || -z "$ENVIRONMENT" || -z "$VPS_ADMIN_USER" ]]; then
     echo -e "${C_ERROR}❌ Error: Missing configuration variables.${C_RESET}"
     exit 1
