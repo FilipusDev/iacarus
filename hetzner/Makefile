@@ -8,6 +8,7 @@ SHELL := /bin/bash
 
 PROVISION_SCRIPT := ./vps-provision.sh
 DESTROY_SCRIPT   := ./vps-destroy.sh
+LIST_SCRIPT      := ./vps-list.sh
 HEALTH_SCRIPT    := ./vps-health-check.sh
 SMOKE_SCRIPT     := ./vps-cf-tunnel-smoke_test.sh
 
@@ -24,13 +25,12 @@ vps-down: ## Destroy a server (Interactive)
 	@$(DESTROY_SCRIPT)
 
 vps-list: ## List active servers
-	@echo -e "$(C_INFO)🔍 Fetching server list...$(C_RESET)"
-	@hcloud server list -o columns=id,name,ipv4,datacenter,status
+	@$(LIST_SCRIPT)
 
-vps-check-heath: ## Run health check
+vps-check-health: ## Run health check
 	@$(HEALTH_SCRIPT)
 
 vps-smoke-tunnel: ## Run smoke test setting up a Cloud Flare Tunnel
 	@$(SMOKE_SCRIPT)
 
-.PHONY: help vps-new vps-down vps-list vps-check-heath vps-smoke-tunnel
+.PHONY: help vps-new vps-down vps-list vps-check-health vps-smoke-tunnel
