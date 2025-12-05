@@ -1,5 +1,31 @@
 #!/bin/bash
 
+# --- GLOBAL ERROR HANDLER ---
+
+# 1. Define the function that runs when things explode
+function handle_error() {
+    local exit_code=$?
+    local last_command="${BASH_COMMAND}"
+
+    echo ""
+    echo -e "${C_ERROR}💥 Script aborted!\n${C_RESET}"
+    echo -e "${C_WARN}Command failed: ${C_INFO}$last_command${C_RESET}"
+    echo -e "${C_WARN}Exit code:      ${C_INFO}$exit_code${C_RESET}"
+
+    # Exit Code 127 = "Command Not Found" (Missing Dependency)
+    if [ $exit_code -eq 127 ]; then
+        echo -e "\n${C_WARN}🔍 Diagnosis: A required tool seems to be missing.${C_RESET}"
+    fi
+
+    echo -e "\n${C_INFO}👉 RECOMMENDATION:${C_RESET}"
+    echo -e "   Run ${C_SUCCESS}make setup${C_RESET} from the project root."
+    echo ""
+}
+
+# 2. Arm the Trap
+# "If any command fails (ERR), run 'handle_error'"
+trap 'handle_error' ERR
+
 # --- FUNCTIONS HETZNER ---
 
 # Function: Clean SSH entries for a specific host/IP/Port
@@ -21,9 +47,27 @@ function clean_known_hosts() {
     fi
 }
 
+# Function: Fail-Fast SSH Check
+function check_ssh_access() {
+    local HOST_ALIAS=$1
+
+    echo -en "\n🔌 Testing connection to $HOST_ALIAS... "
+
+    # -o BatchMode=yes: Fails if key auth fails (won't ask for password)
+    # -o ConnectTimeout=5: Fails if network/firewall is blocking
+    if ssh -q -o BatchMode=yes -o ConnectTimeout=5 "$HOST_ALIAS" exit; then
+        echo -e "${C_SUCCESS}OK${C_RESET}"
+        return 0
+    else
+        echo -e "${C_ERROR}FAILED${C_RESET}"
+        echo -e "${C_WARN}   Could not connect. Check VPN, Firewall, or SSH Key.${C_RESET}"
+        return 1
+    fi
+}
+
 # Function: Interactive Server Selection
 function select_server_interactive() {
-    echo -e "${C_INFO}🔍 Fetching server list from Hetzner...${C_RESET}"
+    echo -e "\n${C_INFO}🔍 Fetching server list from Hetzner...${C_RESET}"
 
     mapfile -t SERVERS < <(hcloud server list -o noheader -o columns=id,name,ipv4,status | awk 'NF {print $1 ":" $2 ":" $3 ":" $4}')
 
@@ -45,22 +89,4 @@ function select_server_interactive() {
             echo "Invalid selection."
         fi
     done
-}
-
-# Function: Fail-Fast SSH Check
-function check_ssh_access() {
-    local HOST_ALIAS=$1
-
-    echo -en "\n🔌 Testing connection to $HOST_ALIAS... "
-
-    # -o BatchMode=yes: Fails if key auth fails (won't ask for password)
-    # -o ConnectTimeout=5: Fails if network/firewall is blocking
-    if ssh -q -o BatchMode=yes -o ConnectTimeout=5 "$HOST_ALIAS" exit; then
-        echo -e "${C_SUCCESS}OK${C_RESET}"
-        return 0
-    else
-        echo -e "${C_ERROR}FAILED${C_RESET}"
-        echo -e "${C_WARN}   Could not connect. Check VPN, Firewall, or SSH Key.${C_RESET}"
-        return 1
-    fi
 }
