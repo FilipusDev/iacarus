@@ -5,7 +5,7 @@ include config.mk
 # -----------------------------------------------------------------------------
 
 help: ## Show this help message
-	@echo -e "\n🦅 $(C_HIGH)IaCarus - CONTROL PLANE$(C_RESET)"
+	@echo -e "\n🦅 $(C_HIGH)IaCarus ${VERSION} - CONTROL PLANE$(C_RESET)"
 	@echo "------------------------------------------------"
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(firstword $(MAKEFILE_LIST)) | awk 'BEGIN {FS = ":.*?## "}; {printf "$(C_HIGH)%-20s$(C_RESET) %s\n", $$1, $$2}'
 	@echo ""
