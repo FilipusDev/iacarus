@@ -9,6 +9,10 @@ C_INFO='\e[38;5;39m'    # Blue
 C_HIGH='\e[38;5;171m'   # Turquoise
 C_RESET='\e[0m'
 
+# --- TOOLKIT VERSIONS ---
+
+LITESTREAM_VERSION="v0.3.13"
+
 # --- SOURCE ENV FILE ---
 
 # 1. Determine the Project Root (Where .env lives)

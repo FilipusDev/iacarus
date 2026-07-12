@@ -146,6 +146,8 @@ config file `./vps-user_data.yml.template`.
 - Check if swap is active.
 - Check if Docker log rotation (`/etc/docker/daemon.json`) is configured.
 - Check if the weekly Docker prune cron job exists and is executable.
+- Check if the Litestream backup daemon is installed and running, and how
+  many databases are currently registered for replication.
 - Check if the server needs a reboot - _a fresh server will always reboot!_
 
 ```sh
@@ -192,10 +194,55 @@ Enter number (or 'q' to quit): 2
 🔍 9. Docker Prune Cron
 ✅ Present & executable.
 
+🔍 10. Litestream Backup Daemon
+✅ Running. 2 database(s) registered.
+
 ✅ System is clean (No reboot needed).
 
 ----------------------------------------
 
+```
+
+### make vps-litestream-add
+
+`make vps-litestream-add` registers automated backups (via [Litestream](https://litestream.io))
+for one SQLite database on a chosen server.
+
+Every server provisioned by `make vps-new` already has the `litestream` binary
+installed, a `litestream.service` running in the background, and an empty
+`/etc/litestream.yml`. This script doesn't provision anything new on the box -
+it appends **one database → one R2 bucket** entry to that config and restarts
+the service to pick it up. Run it once per app: a single box hosting multiple
+Rails apps (each with its own SQLite file) can have each app's database
+replicated to its own dedicated R2 bucket, just by running this command again
+with a different DB path and bucket name.
+
+The target bucket must already exist - create it first with:
+
+```sh
+cd cloudflare && make bucket-new
+```
+
+```sh
+iacarus/hetzner main ❯ make vps-litestream-add
+
+🔍 Checking Pre-requisites...
+🔍 Fetching server list from Hetzner...
+Select a server:
+1) ***949:hetzner-vps-1:<IPv4-IP>:running
+Enter number (or 'q' to quit): 1
+
+🔌 Testing connection to hetzner-vps-1... OK
+
+🗄️  Registering a new SQLite DB for Litestream replication on hetzner-vps-1...
+>  App label (for your reference only, e.g. 'blog'): blog
+>  Full path to the SQLite DB inside its Docker volume (e.g. /var/lib/docker/volumes/blog_data/_data/production.sqlite3): /var/lib/docker/volumes/blog_data/_data/production.sqlite3
+>  Target R2 bucket name (must already exist - see 'cd cloudflare && make bucket-new'): blog-backups
+🔍 Verifying bucket 'blog-backups' exists...
+🔍 Checking for an existing entry on hetzner-vps-1...
+📝 Appending 'blog' (/var/lib/docker/volumes/blog_data/_data/production.sqlite3 -> blog-backups) to /etc/litestream.yml...
+🔄 Restarting litestream...
+✅ 'blog' registered and replicating to 'blog-backups'.
 ```
 
 ### make vps-smoke-tunnel

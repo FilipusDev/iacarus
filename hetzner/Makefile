@@ -6,11 +6,12 @@ include ../config.mk
 
 SHELL := /bin/bash
 
-PROVISION_SCRIPT := ./vps-provision.sh
-DESTROY_SCRIPT   := ./vps-destroy.sh
-LIST_SCRIPT      := ./vps-list.sh
-HEALTH_SCRIPT    := ./vps-health-check.sh
-SMOKE_SCRIPT     := ./vps-cf-tunnel-smoke_test.sh
+PROVISION_SCRIPT  := ./vps-provision.sh
+DESTROY_SCRIPT    := ./vps-destroy.sh
+LIST_SCRIPT       := ./vps-list.sh
+HEALTH_SCRIPT     := ./vps-health-check.sh
+SMOKE_SCRIPT      := ./vps-cf-tunnel-smoke_test.sh
+LITESTREAM_SCRIPT := ./vps-litestream-add.sh
 
 help: ## Show this help message
 	@echo -e "\n$(C_HIGH)| ☁  HETZNER | 🦅 IaCarus ${VERSION} - CONTROL PLANE$(C_RESET)"
@@ -33,4 +34,7 @@ vps-check-health: ## Run health check
 vps-smoke-tunnel: ## Run smoke test setting up a Cloud Flare Tunnel
 	@$(SMOKE_SCRIPT)
 
-.PHONY: help vps-new vps-down vps-list vps-check-health vps-smoke-tunnel
+vps-litestream-add: ## Register a new SQLite DB for Litestream backup replication
+	@$(LITESTREAM_SCRIPT)
+
+.PHONY: help vps-new vps-down vps-list vps-check-health vps-smoke-tunnel vps-litestream-add

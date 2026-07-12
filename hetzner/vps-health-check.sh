@@ -148,6 +148,20 @@ else
     echo -e "${R}❌ Missing or not executable '/etc/cron.weekly/docker-prune'.${N}"
 fi
 
+echo ""
+echo "🔍 10. Litestream Backup Daemon"
+if [ -f /usr/local/bin/litestream ] && [ -f /etc/litestream.yml ]; then
+    if systemctl is-active --quiet litestream; then
+        DB_COUNT=$(sudo grep -c "path:" /etc/litestream.yml 2>/dev/null)
+        DB_COUNT=${DB_COUNT:-0}
+        echo -e "${G}✅ Running. ${DB_COUNT} database(s) registered.${N}"
+    else
+        echo -e "${R}❌ Installed but NOT running.${N}"
+    fi
+else
+    echo -e "${R}❌ Missing binary or '/etc/litestream.yml'.${N}"
+fi
+
 # Reboot Check
 if [ -f /var/run/reboot-required ]; then
     echo ""

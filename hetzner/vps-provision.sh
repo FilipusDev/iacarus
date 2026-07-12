@@ -7,7 +7,7 @@ source ../utils.sh
 
 # 1. Check configuration variables availability
 echo -e "\n${C_INFO}🔍 Checking Pre-requisites...${C_RESET}"
-if [[ -z "$SSH_HOME_PATH" || -z "$SSH_PUBLIC_KEY_PATH" || -z "$SSH_PRIVATE_KEY_PATH" || -z "$VPS_BASE_NAME" || -z "$VPS_TYPE" || -z "$VPS_LOCATION" || -z "$VPS_IMAGE" || -z "$ENVIRONMENT" || -z "$VPS_ADMIN_USER" ]]; then
+if [[ -z "$SSH_HOME_PATH" || -z "$SSH_PUBLIC_KEY_PATH" || -z "$SSH_PRIVATE_KEY_PATH" || -z "$VPS_BASE_NAME" || -z "$VPS_TYPE" || -z "$VPS_LOCATION" || -z "$VPS_IMAGE" || -z "$ENVIRONMENT" || -z "$VPS_ADMIN_USER" || -z "$LITESTREAM_VERSION" ]]; then
     echo -e "${C_ERROR}❌ Error: Missing configuration variables.${C_RESET}"
     exit 1
 fi
@@ -29,6 +29,7 @@ SSH_PUBLIC_KEY=$(cat "$SSH_PUBLIC_KEY_PATH")
 sed -e "s|{{SSH_KEY}}|$SSH_PUBLIC_KEY|g" \
     -e "s|{{SSH_PORT}}|$SSH_PORT|g" \
     -e "s|{{USER}}|$VPS_ADMIN_USER|g" \
+    -e "s|{{LITESTREAM_VERSION}}|$LITESTREAM_VERSION|g" \
     ./vps-user_data.yml.template > vps-user_data.yml
 
 # 4. Provision via Hetzner CLI
