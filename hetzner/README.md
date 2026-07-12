@@ -7,13 +7,13 @@ Run from the repo root: `cd hetzner`.
 `make vps-new` will **automatically provision a new server**.
 It simply runs the `iacarus/hetzner/vps-provision.sh` script.
 
-The server’s configuration is defined in: `iacarus/config.sh`:
+The server’s configuration is defined in: `iacarus/.env`:
 
 ```sh
-# --- HETZNER VPS CONFIG ---
+# HETZNER VPS
 
 VPS_BASE_NAME="hetzner-vps-"
-VPS_TYPE="cax11"
+VPS_TYPE="cx23"
 VPS_LOCATION="hel1"
 VPS_IMAGE="ubuntu-24.04"
 ENVIRONMENT="development"
@@ -143,6 +143,9 @@ config file `./vps-user_data.yml.template`.
   - Pass Auth must be disabled.
 - Check SSH config files:
   - Only `hardening.conf` should exist.
+- Check if swap is active.
+- Check if Docker log rotation (`/etc/docker/daemon.json`) is configured.
+- Check if the weekly Docker prune cron job exists and is executable.
 - Check if the server needs a reboot - _a fresh server will always reboot!_
 
 ```sh
@@ -179,6 +182,15 @@ Enter number (or 'q' to quit): 2
 
 🔍 6. SSH File Hygiene
 ✅ Clean. (Only 'hardening.conf' exists)
+
+🔍 7. Swap
+✅ Active (2048MB).
+
+🔍 8. Docker Log Rotation
+✅ Configured (max-size: 10m).
+
+🔍 9. Docker Prune Cron
+✅ Present & executable.
 
 ✅ System is clean (No reboot needed).
 

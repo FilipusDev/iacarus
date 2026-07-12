@@ -40,8 +40,10 @@ servers, and **Cloudflare R2** storage buckets using simple Bash scripts and Mak
 ## 🌐 Accounts
 
 Yes, I know, this "stack" isn't free... BUT, it's extremely cheap.
-The Hetzner Box configured by default (CAX11) is the cheapest one.
-We're talking about 6 bucks (USD) cheap. Per VPS!
+The Hetzner Box configured by default targets their cheapest shared-vCPU
+tier - check the [Hetzner console](https://console.hetzner.cloud) for
+updated availability, since server types come and go over time.
+We're talking about a few bucks (USD) cheap. Per VPS!
 
 As of now (`v0.1.0`) you'll need 2 accounts: one for Hetzner and one for Cloudflare.
 
@@ -69,7 +71,7 @@ During the process you might need to provide a payment method.
 
 ### The Box (Hetzner)
 
-- **OS:** Ubuntu 24.04 (Arm64/CAX11)
+- **OS:** Ubuntu 24.04 (server type configurable via `.env`, see [Hetzner console](https://console.hetzner.cloud) for available types)
 - **Security:** \* **Zero Open Ports:** All ingress ports (80/443) are BLOCKED by default.
   - **SSH:** Custom randomized port (1022-60022), Key-only auth, Root disabled.
   - **Networking:** Ingress handled via **Cloudflare Tunnel** (Reverse Proxy).

@@ -13,12 +13,12 @@ C_RESET='\e[0m'
 
 # 1. Determine the Project Root (Where .env lives)
 if [ -f ".env" ]; then
-    ENV_FILE=".env"
+  ENV_FILE=".env"
 elif [ -f "../.env" ]; then
-    ENV_FILE="../.env"
+  ENV_FILE="../.env"
 else
-    echo -e "${C_ERROR}❌ Error: Could not find .env file.${C_RESET}"
-    exit 1
+  echo -e "${C_ERROR}❌ Error: Could not find .env file.${C_RESET}"
+  exit 1
 fi
 
 # 2. Source it
@@ -31,12 +31,12 @@ SSH_PRIVATE_KEY_PATH=${SSH_PRIVATE_KEY_PATH}
 
 # --- HETZNER VPS CONFIG ---
 
-VPS_BASE_NAME="hetzner-vps-"
-VPS_TYPE="cax11"
-VPS_LOCATION="hel1"
-VPS_IMAGE="ubuntu-24.04"
-ENVIRONMENT="development"
-VPS_ADMIN_USER="hzr-user"
+VPS_BASE_NAME=${VPS_BASE_NAME}
+VPS_TYPE=${VPS_TYPE}
+VPS_LOCATION=${VPS_LOCATION}
+VPS_IMAGE=${VPS_IMAGE}
+ENVIRONMENT=${ENVIRONMENT}
+VPS_ADMIN_USER=${VPS_ADMIN_USER}
 
 # --- CLOUDFLARE ZERO TRUST TUNNEL CONFIG ---
 

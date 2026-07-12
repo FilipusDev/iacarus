@@ -10,6 +10,11 @@ users:
 package_update: true
 package_upgrade: true
 
+swap:
+  filename: /swapfile
+  size: 2147483648
+  maxsize: 2147483648
+
 packages:
   - docker.io
   - git
@@ -44,6 +49,22 @@ write_files:
     content: |
       APT::Periodic::Update-Package-Lists "1";
       APT::Periodic::Unattended-Upgrade "1";
+
+  - path: /etc/docker/daemon.json
+    content: |
+      {
+        "log-driver": "json-file",
+        "log-opts": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      }
+
+  - path: /etc/cron.weekly/docker-prune
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      docker system prune -f
 
 runcmd:
   - rm -f /etc/ssh/sshd_config.d/50-cloud-init.conf

@@ -123,6 +123,31 @@ else
     fi
 fi
 
+echo ""
+echo "🔍 7. Swap"
+SWAP_TOTAL=$(free -m | awk '/^Swap:/ {print $2}')
+if [ -n "$SWAP_TOTAL" ] && [ "$SWAP_TOTAL" -gt 0 ]; then
+    echo -e "${G}✅ Active (${SWAP_TOTAL}MB).${N}"
+else
+    echo -e "${R}❌ No swap allocated.${N}"
+fi
+
+echo ""
+echo "🔍 8. Docker Log Rotation"
+if [ -f /etc/docker/daemon.json ] && grep -q '"max-size": "10m"' /etc/docker/daemon.json; then
+    echo -e "${G}✅ Configured (max-size: 10m).${N}"
+else
+    echo -e "${R}❌ Missing or misconfigured '/etc/docker/daemon.json'.${N}"
+fi
+
+echo ""
+echo "🔍 9. Docker Prune Cron"
+if [ -x /etc/cron.weekly/docker-prune ]; then
+    echo -e "${G}✅ Present & executable.${N}"
+else
+    echo -e "${R}❌ Missing or not executable '/etc/cron.weekly/docker-prune'.${N}"
+fi
+
 # Reboot Check
 if [ -f /var/run/reboot-required ]; then
     echo ""
