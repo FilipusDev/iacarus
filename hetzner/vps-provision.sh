@@ -81,9 +81,20 @@ echo -e "${C_INFO}🔑 Registering SSH Keys...${C_RESET}"
 # Clean ANY previous record of this IP or [IP]:PORT to avoid conflicts
 clean_known_hosts "$SERVER_NAME" "$SERVER_IP" "$SSH_PORT"
 
-# Scan the CUSTOM port (Append to known_hosts)
-ssh-keyscan -p "$SSH_PORT" "$SERVER_IP" 2>/dev/null | grep -v "^#" >> $SSH_HOME_PATH/known_hosts || true
-ssh-keyscan -p "$SSH_PORT" "$SERVER_NAME" 2>/dev/null | grep -v "^#" >> $SSH_HOME_PATH/known_hosts || true
+# Scan the CUSTOM port (Append to known_hosts). Backgrounded so we can print
+# a progress counter - ssh-keyscan gives no feedback while it waits.
+(
+    ssh-keyscan -p "$SSH_PORT" "$SERVER_IP" 2>/dev/null | grep -v "^#" >> $SSH_HOME_PATH/known_hosts || true
+    ssh-keyscan -p "$SSH_PORT" "$SERVER_NAME" 2>/dev/null | grep -v "^#" >> $SSH_HOME_PATH/known_hosts || true
+) &
+KEYSCAN_PID=$!
+
+while kill -0 "$KEYSCAN_PID" 2>/dev/null; do
+    echo -n "."
+    sleep 1
+done
+wait "$KEYSCAN_PID"
+echo -e "\n${C_SUCCESS}✅ Keys registered.${C_RESET}"
 
 echo -e "------------------------------------------------"
 echo -e "${C_SUCCESS}🎉 DEPLOYMENT COMPLETE!${C_RESET}"
