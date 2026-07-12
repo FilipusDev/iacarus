@@ -97,8 +97,15 @@ done
 wait "$KEYSCAN_PID"
 echo -e "\n${C_SUCCESS}✅ Keys registered.${C_RESET}"
 
+SERVER_IPV6=$(hcloud server ip --ipv6 "$SERVER_NAME")
+
 echo -e "------------------------------------------------"
 echo -e "${C_SUCCESS}🎉 DEPLOYMENT COMPLETE!${C_RESET}"
 echo -e "   ${C_WARN}It's strongly advised that you setup a Hetzner Firewall allowing ONLY the SSH PORT: ${SSH_PORT}${C_RESET}"
 echo -e "   Login: ${C_SUCCESS}ssh $SERVER_NAME${C_RESET}"
+echo -e "------------------------------------------------"
+echo -e "   ${C_WARN}If you'll use Litestream backups (make vps-litestream-add) and your R2 API${C_RESET}"
+echo -e "   ${C_WARN}token has Client IP Address Filtering enabled, allowlist this box now:${C_RESET}"
+echo -e "   IPv4: ${C_HIGH}$SERVER_IP/32${C_RESET}"
+echo -e "   IPv6: ${C_HIGH}$SERVER_IPV6/128${C_RESET}"
 echo -e "------------------------------------------------"

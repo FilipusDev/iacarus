@@ -30,4 +30,4 @@ bucket-list: ## List all R2 buckets
 bucket-smoke: ## Run smoke test a R2 bucket
 	@$(SMOKE_SCRIPT)
 
-.PHONY: help bucket-new bucket-down bucket-list bucket-smoke
+.PHONY: help bucket-new bucket-delete bucket-list bucket-smoke

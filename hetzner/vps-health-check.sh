@@ -155,6 +155,13 @@ if [ -f /usr/local/bin/litestream ] && [ -f /etc/litestream.yml ]; then
         DB_COUNT=$(sudo grep -c "path:" /etc/litestream.yml 2>/dev/null)
         DB_COUNT=${DB_COUNT:-0}
         echo -e "${G}✅ Running. ${DB_COUNT} database(s) registered.${N}"
+
+        if [ "$DB_COUNT" -gt 0 ]; then
+            IPV4=$(hostname -I | awk '{print $1}')
+            IPV6=$(ip -6 addr show scope global | grep -oP '(?<=inet6\s)[0-9a-f:]+' | head -1)
+            echo -e "${Y}   Reminder: if backups aren't landing in R2, check your R2 token's Client${N}"
+            echo -e "${Y}   IP Address Filtering allows this box: ${IPV4}/32, ${IPV6}/128${N}"
+        fi
     else
         echo -e "${R}❌ Installed but NOT running.${N}"
     fi

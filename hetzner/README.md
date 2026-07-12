@@ -50,6 +50,11 @@ Stabilizing connection...
    It s strongly advised that you setup a Hetzner Firewall allowing ONLY the SSH PORT: ***22
    Login: ssh hetzner-vps-1
 ------------------------------------------------
+   If you'll use Litestream backups (make vps-litestream-add) and your R2 API
+   token has Client IP Address Filtering enabled, allowlist this box now:
+   IPv4: ***.***.***.***/32
+   IPv6: ****:****:****:****::1/128
+------------------------------------------------
 ```
 
 SSH configuration is handled automatically: `~/.ssh/config` and
@@ -196,6 +201,8 @@ Enter number (or 'q' to quit): 2
 
 🔍 10. Litestream Backup Daemon
 ✅ Running. 2 database(s) registered.
+   Reminder: if backups aren't landing in R2, check your R2 token's Client
+   IP Address Filtering allows this box: ***.***.***.***/32, ****:****:****:****::1/128
 
 ✅ System is clean (No reboot needed).
 
