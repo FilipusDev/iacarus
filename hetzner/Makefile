@@ -6,12 +6,14 @@ include ../config.mk
 
 SHELL := /bin/bash
 
-PROVISION_SCRIPT  := ./vps-provision.sh
-DESTROY_SCRIPT    := ./vps-destroy.sh
-LIST_SCRIPT       := ./vps-list.sh
-HEALTH_SCRIPT     := ./vps-health-check.sh
-SMOKE_SCRIPT      := ./vps-cf-tunnel-smoke_test.sh
-LITESTREAM_SCRIPT := ./vps-litestream-add.sh
+PROVISION_SCRIPT         := ./vps-provision.sh
+DESTROY_SCRIPT           := ./vps-destroy.sh
+LIST_SCRIPT              := ./vps-list.sh
+HEALTH_SCRIPT            := ./vps-health-check.sh
+SMOKE_SCRIPT             := ./vps-cf-tunnel-smoke_test.sh
+LITESTREAM_SCRIPT        := ./vps-litestream-add.sh
+LITESTREAM_REMOVE_SCRIPT := ./vps-litestream-remove.sh
+LITESTREAM_SMOKE_SCRIPT  := ./vps-litestream-smoke_test.sh
 
 help: ## Show this help message
 	@echo -e "\n$(C_HIGH)| ☁  HETZNER | 🦅 IaCarus ${VERSION} - CONTROL PLANE$(C_RESET)"
@@ -37,4 +39,10 @@ vps-smoke-tunnel: ## Run smoke test setting up a Cloud Flare Tunnel
 vps-litestream-add: ## Register a new SQLite DB for Litestream backup replication
 	@$(LITESTREAM_SCRIPT)
 
-.PHONY: help vps-new vps-down vps-list vps-check-health vps-smoke-tunnel vps-litestream-add
+vps-litestream-remove: ## Deregister a SQLite DB from Litestream backup replication
+	@$(LITESTREAM_REMOVE_SCRIPT)
+
+vps-litestream-smoke: ## Run an end-to-end Litestream replication smoke test
+	@$(LITESTREAM_SMOKE_SCRIPT)
+
+.PHONY: help vps-new vps-down vps-list vps-check-health vps-smoke-tunnel vps-litestream-add vps-litestream-remove vps-litestream-smoke

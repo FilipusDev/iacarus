@@ -245,6 +245,74 @@ Enter number (or 'q' to quit): 1
 ✅ 'blog' registered and replicating to 'blog-backups'.
 ```
 
+### make vps-litestream-remove
+
+`make vps-litestream-remove` stops backing up one app's SQLite database on a
+chosen server: it removes that entry (by the label you gave it in
+`make vps-litestream-add`) from `/etc/litestream.yml` and restarts the
+service. It does **not** delete any existing backups already sitting in R2 -
+only the box stops replicating going forward. Requires typing the label to
+confirm, same "Safety Lock" pattern as `make vps-down`.
+
+```sh
+iacarus/hetzner main ❯ make vps-litestream-remove
+
+🔍 Fetching server list from Hetzner...
+Select a server:
+1) ***949:hetzner-vps-1:<IPv4-IP>:running
+Enter number (or 'q' to quit): 1
+
+🔌 Testing connection to hetzner-vps-1... OK
+
+🗑️  Deregistering a SQLite DB from Litestream replication on hetzner-vps-1...
+>  App label to remove (as given to 'make vps-litestream-add'): blog
+🔍 Checking for 'blog' on hetzner-vps-1...
+⚠️  This stops backups for 'blog' - existing R2 objects are NOT deleted.
+>  Type 'blog' to confirm: blog
+📝 Removing 'blog' from /etc/litestream.yml...
+🔄 Restarting litestream...
+✅ 'blog' deregistered.
+```
+
+### make vps-litestream-smoke
+
+`make vps-litestream-smoke` proves Litestream is actually replicating to R2
+end-to-end on a chosen server - not just that the daemon is running (which is
+all `make vps-check-health`'s Check 10 confirms). A misconfigured R2 secret,
+bucket, or endpoint would still show the daemon as "running" while silently
+producing zero real backups; this test catches that.
+
+It's fully automated, unlike `make vps-smoke-tunnel`: it creates a disposable
+SQLite database in its own Docker volume on the box, registers it under a
+throwaway R2 bucket, polls that bucket until Litestream's replicated objects
+actually show up, then tears everything down again - the test database, its
+Litestream registration, and the throwaway bucket - regardless of whether the
+test passed or failed.
+
+```sh
+iacarus/hetzner main ❯ make vps-litestream-smoke
+
+🔍 Checking Pre-requisites...
+🔍 Fetching server list from Hetzner...
+Select a server:
+1) ***949:hetzner-vps-1:<IPv4-IP>:running
+Enter number (or 'q' to quit): 1
+
+🔌 Testing connection to hetzner-vps-1... OK
+
+🌫️  Starting Litestream Smoke Test on 'hetzner-vps-1'...
+----------------------------------------
+1. Creating throwaway bucket (smoke-test-litestream-1752345678)... OK
+2. Creating disposable SQLite DB on hetzner-vps-1... OK
+3. Registering DB for replication... OK
+4. Waiting for replication to land in R2 ... OK
+
+🎉 SMOKE TEST PASSED! Litestream is replicating to R2 end-to-end.
+
+🧹 Cleaning up...
+✅ Cleaned up.
+```
+
 ### make vps-smoke-tunnel
 
 This script assumes you have already created a Zero Trust Tunnel for smoke tests

@@ -90,3 +90,47 @@ function select_server_interactive() {
         fi
     done
 }
+
+# Function: Append a DB entry to a remote host's /etc/litestream.yml and
+# restart the daemon so it picks it up. Returns 0 if litestream ends up
+# active, 1 otherwise.
+function litestream_register_db() {
+    local HOST=$1
+    local LABEL=$2
+    local DB_PATH=$3
+    local BUCKET_NAME=$4
+    local ENDPOINT=$5
+    local ACCESS_KEY=$6
+    local SECRET_KEY=$7
+
+    ssh -q "$HOST" "sudo tee -a /etc/litestream.yml > /dev/null" <<EOF
+  # $LABEL
+  - path: $DB_PATH
+    replicas:
+      - type: s3
+        bucket: $BUCKET_NAME
+        region: auto
+        endpoint: $ENDPOINT
+        access-key-id: $ACCESS_KEY
+        secret-access-key: $SECRET_KEY
+EOF
+
+    ssh -q "$HOST" "sudo systemctl restart litestream"
+    ssh -q "$HOST" "systemctl is-active --quiet litestream"
+}
+
+# Function: Remove a labeled DB entry from a remote host's
+# /etc/litestream.yml and restart the daemon. Entries are matched by their
+# "  # <label>" comment line through to the next entry's comment (or EOF).
+# The filtered content is copied (not moved) onto the existing file so its
+# 0600 root:root permissions are preserved rather than replaced. Returns 0
+# if litestream ends up active, 1 otherwise.
+function litestream_remove_db() {
+    local HOST=$1
+    local LABEL=$2
+
+    ssh -q "$HOST" "sudo awk -v label='  # $LABEL' '\$0==label{skip=1;next} skip&&/^  # /{skip=0} !skip' /etc/litestream.yml > /tmp/litestream.yml.tmp && sudo cp /tmp/litestream.yml.tmp /etc/litestream.yml && rm -f /tmp/litestream.yml.tmp"
+
+    ssh -q "$HOST" "sudo systemctl restart litestream"
+    ssh -q "$HOST" "systemctl is-active --quiet litestream"
+}

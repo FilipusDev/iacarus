@@ -61,25 +61,11 @@ if ssh -q "$SELECTED_NAME" "sudo grep -qF -- 'path: $DB_PATH' /etc/litestream.ym
     exit 1
 fi
 
-# 7. Append the DB Entry
+# 7. Append the DB Entry & Restart Litestream to Pick It Up
 echo -e "${C_INFO}📝 Appending '$APP_LABEL' ($DB_PATH -> $BUCKET_NAME) to /etc/litestream.yml...${C_RESET}"
-
-ssh -q "$SELECTED_NAME" "sudo tee -a /etc/litestream.yml > /dev/null" <<EOF
-  # $APP_LABEL
-  - path: $DB_PATH
-    replicas:
-      - type: s3
-        bucket: $BUCKET_NAME
-        endpoint: $CF_R2_S3_CLIENT_URL
-        access-key-id: $CF_R2_S3_CLIENT_ACCESS_KEY_ID
-        secret-access-key: $CF_R2_S3_CLIENT_SECRET_ACCESS_KEY
-EOF
-
-# 8. Restart Litestream to Pick Up the New Config
 echo -e "${C_INFO}🔄 Restarting litestream...${C_RESET}"
-ssh -q "$SELECTED_NAME" "sudo systemctl restart litestream"
 
-if ssh -q "$SELECTED_NAME" "systemctl is-active --quiet litestream"; then
+if litestream_register_db "$SELECTED_NAME" "$APP_LABEL" "$DB_PATH" "$BUCKET_NAME" "$CF_R2_S3_CLIENT_URL" "$CF_R2_S3_CLIENT_ACCESS_KEY_ID" "$CF_R2_S3_CLIENT_SECRET_ACCESS_KEY"; then
     echo -e "${C_SUCCESS}✅ '$APP_LABEL' registered and replicating to '$BUCKET_NAME'.${C_RESET}"
 else
     echo -e "${C_ERROR}❌ litestream failed to (re)start. Check 'journalctl -u litestream' on $SELECTED_NAME.${C_RESET}"
