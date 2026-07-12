@@ -151,8 +151,12 @@ fi
 # Reboot Check
 if [ -f /var/run/reboot-required ]; then
     echo ""
-    echo -e "${R}🔄 Reboot REQUIRED. Restarting in 5s...${N}"
-    sleep 5 && sudo reboot && sleep 10
+    echo -e "${R}🔄 Reboot REQUIRED. Rebooting in the background...${N}"
+    # Detached so this SSH session exits cleanly (0) before the box actually
+    # reboots - otherwise `sudo reboot` kills the connection mid-script and
+    # the caller's ERR trap misreports the expected reboot as a failure.
+    nohup sudo bash -c 'sleep 5 && reboot' > /dev/null 2>&1 &
+    disown
 else
     echo ""
     echo -e "${G}✅ System is clean (No reboot needed).${N}"
