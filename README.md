@@ -191,6 +191,34 @@ CF_TUNNEL_SMOKE_TEST_TOKEN=
 CF_TUNNEL_TOKEN=
 ```
 
+> **Note:** `CF_TUNNEL_TOKEN` is only consumed by IaCarus's own
+> `make vps-smoke-tunnel` validation - no IaCarus script runs a persistent
+> tunnel on the box. For real per-app ingress, run `cloudflared` as an
+> **accessory in that app's own Kamal `deploy.yml`** (its own tunnel token,
+> stored in that app's own `.kamal/secrets`), for example:
+>
+> ```yml
+> accessories:
+>   cloudflared:
+>     image: cloudflare/cloudflared:latest
+>     roles:
+>       - web
+>     env:
+>       secret:
+>         - TUNNEL_TOKEN:KAMAL_CF_TUNNEL_TOKEN
+>     cmd: "tunnel --no-autoupdate run"
+> ```
+>
+> Point that tunnel's "Public Hostname" service at `http://kamal-proxy:80`
+> (Kamal's shared reverse proxy on the box), not at the app container
+> directly - Kamal renames it on every deploy. Deploying a second app to the
+> same box gets its own `<service>-cloudflared` container and its own token
+> automatically (Kamal names accessories `<service>-<accessory>`), so
+> multiple apps' tunnels never collide - only `kamal-proxy` itself is shared.
+> This keeps each app's ingress independently revocable, mirroring the
+> per-app R2 token isolation `vps-app-add` already gives you (see the
+> [Hetzner README](./hetzner/README.md#make-vps-app-add)).
+
 #### CLOUDFLARE R2 STORAGE
 
 1. Access your cloudflare account: <https://dash.cloudflare.com>

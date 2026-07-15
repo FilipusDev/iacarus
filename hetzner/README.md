@@ -367,6 +367,16 @@ an `ENVIRONMENT` (default `prd`), it:
 > step). That's an entirely separate Cloudflare feature (DNS/zone-bound) from
 > the S3-credential scoping this orchestrator automates.
 
+> **Ingress is NOT configured by this tool either.** Give each app its own
+> Cloudflare Tunnel as a **Kamal accessory** in that app's own `deploy.yml`
+> (own token, own `.kamal/secrets`) - see the root
+> [README's `CF_TUNNEL_TOKEN` note](../README.md#cloudflare-zero-trust-tunnel)
+> for the pattern. Kamal names accessories `<service>-<accessory>`, so a
+> second app on the same box gets its own `<service>-cloudflared` container
+> automatically - only the shared `kamal-proxy` container is common to all
+> apps on the box. This keeps each app's ingress independently revocable, the
+> same isolation principle behind the two scoped R2 tokens above.
+
 ```sh
 iacarus/hetzner main ❯ make vps-app-add
 
