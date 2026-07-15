@@ -14,6 +14,8 @@ SMOKE_SCRIPT             := ./vps-cf-tunnel-smoke_test.sh
 LITESTREAM_SCRIPT        := ./vps-litestream-add.sh
 LITESTREAM_REMOVE_SCRIPT := ./vps-litestream-remove.sh
 LITESTREAM_SMOKE_SCRIPT  := ./vps-litestream-smoke_test.sh
+APP_ADD_SCRIPT           := ./vps-rails-app-add.sh
+APP_REMOVE_SCRIPT        := ./vps-rails-app-remove.sh
 
 help: ## Show this help message
 	@echo -e "\n$(C_HIGH)| ☁  HETZNER | 🦅 IaCarus ${VERSION} - CONTROL PLANE$(C_RESET)"
@@ -45,4 +47,10 @@ vps-litestream-remove: ## Deregister a SQLite DB from Litestream backup replicat
 vps-litestream-smoke: ## Run an end-to-end Litestream replication smoke test
 	@$(LITESTREAM_SMOKE_SCRIPT)
 
-.PHONY: help vps-new vps-down vps-list vps-check-health vps-smoke-tunnel vps-litestream-add vps-litestream-remove vps-litestream-smoke
+vps-app-add: ## Orchestrate a client app: R2 buckets + 2 isolated scoped tokens + Litestream
+	@$(APP_ADD_SCRIPT)
+
+vps-app-remove: ## Decommission a client app: revoke both tokens + deregister Litestream
+	@$(APP_REMOVE_SCRIPT)
+
+.PHONY: help vps-new vps-down vps-list vps-check-health vps-smoke-tunnel vps-litestream-add vps-litestream-remove vps-litestream-smoke vps-app-add vps-app-remove

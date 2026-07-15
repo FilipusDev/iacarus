@@ -42,6 +42,25 @@ VPS_IMAGE=${VPS_IMAGE}
 ENVIRONMENT=${ENVIRONMENT}
 VPS_ADMIN_USER=${VPS_ADMIN_USER}
 
+# --- CLOUDFLARE API (TOKEN FACTORY) CONFIG ---
+
+# The single, canonical Cloudflare Account ID. Shared by the token factory AND
+# the R2 S3 endpoint below.
+CF_ACCOUNT_ID=${CF_ACCOUNT_ID}
+
+# High-level bearer token used to MINT/REVOKE per-app scoped R2 tokens.
+# Requires the account permissions: "API Tokens:Edit" + "Workers R2 Storage:Edit".
+CF_API_BEARER_TOKEN=${CF_API_BEARER_TOKEN}
+
+# Cloudflare API base + the R2 bucket-item permission groups attached to every
+# minted token. Both READ and WRITE are granted so Litestream can restore (read
+# + list) as well as replicate (write). IDs are stable per account and were
+# resolved from GET /accounts/<id>/tokens/permission_groups.
+CF_API_BASE="https://api.cloudflare.com/client/v4"
+CF_R2_PG_BUCKET_ITEM_WRITE="2efd5506f9c8494dacb1fa10a3e7d5b6"
+CF_R2_PG_BUCKET_ITEM_READ="6a018a9f2fc74eb6b293b0c548f38b39"
+CF_R2_JURISDICTION="default"
+
 # --- CLOUDFLARE ZERO TRUST TUNNEL CONFIG ---
 
 CF_TUNNEL_SMOKE_TEST_TOKEN=${CF_TUNNEL_SMOKE_TEST_TOKEN}

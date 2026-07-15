@@ -134,3 +134,169 @@ function litestream_remove_db() {
     ssh -q "$HOST" "sudo systemctl restart litestream"
     ssh -q "$HOST" "systemctl is-active --quiet litestream"
 }
+
+# Function: Read the access-key-id (which, for tokens minted by this tool, IS
+# the Cloudflare token id) out of a labeled entry in a remote host's
+# /etc/litestream.yml. Matches the "  # <label>" block through to the next
+# entry's comment (or EOF) and prints the first access-key-id found. Prints
+# nothing if the label or field is absent.
+function litestream_get_access_key() {
+    local HOST=$1
+    local LABEL=$2
+
+    ssh -q "$HOST" "sudo awk -v label='  # $LABEL' '\$0==label{f=1;next} f&&/^  # /{f=0} f&&/access-key-id:/{print \$2; exit}' /etc/litestream.yml"
+}
+
+# Function: Read the bucket name out of a labeled entry in a remote host's
+# /etc/litestream.yml. Same matching rules as litestream_get_access_key.
+# Used to derive the app slug (and from it, the sibling upload bucket/token
+# name) without needing any separate local registry file.
+function litestream_get_bucket() {
+    local HOST=$1
+    local LABEL=$2
+
+    ssh -q "$HOST" "sudo awk -v label='  # $LABEL' '\$0==label{f=1;next} f&&/^  # /{f=0} f&&/bucket:/{print \$2; exit}' /etc/litestream.yml"
+}
+
+# --- FUNCTIONS CLOUDFLARE ---
+
+# Function: Mint an account-owned R2 API token scoped to EXACTLY ONE bucket
+# and derive its S3 credential pair. Carries both the R2 bucket-item READ and
+# WRITE permission groups (so the holder can restore/serve as well as write).
+#
+#   cloudflare_create_scoped_token <TOKEN_NAME> <BUCKET_NAME>
+#
+# Each app gets TWO of these (one per bucket) rather than one token shared
+# across both buckets - this keeps them genuinely isolated: a credential
+# handed to the app (upload bucket) can never touch the backup bucket, and
+# vice-versa.
+#
+# On success (return 0) it sets three globals for the caller to consume:
+#   CF_SCOPED_TOKEN_ID          - the token id (also the S3 Access Key ID)
+#   CF_SCOPED_ACCESS_KEY_ID     - alias of the above, for readability
+#   CF_SCOPED_SECRET_ACCESS_KEY - SHA-256 hex digest of the raw token value
+# The raw token value is never written to disk and never echoed. Returns 1 on
+# any Cloudflare API failure (with the API's error messages printed to stderr).
+function cloudflare_create_scoped_token() {
+    local TOKEN_NAME=$1
+    local BUCKET_NAME=$2
+
+    if [[ -z "$CF_API_BEARER_TOKEN" || -z "$CF_ACCOUNT_ID" ]]; then
+        echo -e "${C_ERROR}❌ Missing CF_API_BEARER_TOKEN or CF_ACCOUNT_ID.${C_RESET}" >&2
+        return 1
+    fi
+
+    # R2 bucket resource identifier: <account_id>_<jurisdiction>_<bucket_name>
+    local RESOURCE="com.cloudflare.edge.r2.bucket.${CF_ACCOUNT_ID}_${CF_R2_JURISDICTION}_${BUCKET_NAME}"
+
+    # Build the Access Policy body with jq (proper escaping of dynamic keys).
+    local BODY
+    BODY=$(jq -n \
+        --arg name "$TOKEN_NAME" \
+        --arg res "$RESOURCE" \
+        --arg w "$CF_R2_PG_BUCKET_ITEM_WRITE" --arg r "$CF_R2_PG_BUCKET_ITEM_READ" '
+        {
+          name: $name,
+          policies: [ {
+            effect: "allow",
+            resources: { ($res): "*" },
+            permission_groups: [ { id: $w }, { id: $r } ]
+          } ]
+        }')
+
+    local RESP
+    RESP=$(curl -s -X POST "${CF_API_BASE}/accounts/${CF_ACCOUNT_ID}/tokens" \
+        -H "Authorization: Bearer ${CF_API_BEARER_TOKEN}" \
+        -H "Content-Type: application/json" \
+        --data "$BODY")
+
+    if [ "$(echo "$RESP" | jq -r '.success')" != "true" ]; then
+        echo -e "${C_ERROR}❌ Cloudflare token creation failed:${C_RESET}" >&2
+        echo "$RESP" | jq -r '.errors[]? | "   [\(.code)] \(.message)"' >&2
+        return 1
+    fi
+
+    # S3 credential derivation:
+    #   Access Key ID     = token id
+    #   Secret Access Key = SHA-256 hex of the raw token value (NO trailing
+    #                       newline - $(...) strips it, printf re-emits exactly).
+    local TVAL
+    CF_SCOPED_TOKEN_ID=$(echo "$RESP" | jq -r '.result.id')
+    CF_SCOPED_ACCESS_KEY_ID="$CF_SCOPED_TOKEN_ID"
+    TVAL=$(echo "$RESP" | jq -r '.result.value')
+    CF_SCOPED_SECRET_ACCESS_KEY=$(printf '%s' "$TVAL" | sha256sum | cut -d' ' -f1)
+
+    return 0
+}
+
+# Function: Revoke (delete) a previously minted R2 API token by its id, cleanly
+# decommissioning the credential in Cloudflare.
+#
+#   cloudflare_delete_token <TOKEN_ID>
+#
+# Returns 0 on success, 1 on any API failure (errors printed to stderr).
+function cloudflare_delete_token() {
+    local TOKEN_ID=$1
+
+    if [ -z "$TOKEN_ID" ]; then
+        echo -e "${C_ERROR}❌ cloudflare_delete_token: a token id is required.${C_RESET}" >&2
+        return 1
+    fi
+
+    if [[ -z "$CF_API_BEARER_TOKEN" || -z "$CF_ACCOUNT_ID" ]]; then
+        echo -e "${C_ERROR}❌ Missing CF_API_BEARER_TOKEN or CF_ACCOUNT_ID.${C_RESET}" >&2
+        return 1
+    fi
+
+    local RESP
+    RESP=$(curl -s -X DELETE "${CF_API_BASE}/accounts/${CF_ACCOUNT_ID}/tokens/${TOKEN_ID}" \
+        -H "Authorization: Bearer ${CF_API_BEARER_TOKEN}" \
+        -H "Content-Type: application/json")
+
+    if [ "$(echo "$RESP" | jq -r '.success')" != "true" ]; then
+        echo -e "${C_ERROR}❌ Cloudflare token deletion failed:${C_RESET}" >&2
+        echo "$RESP" | jq -r '.errors[]? | "   [\(.code)] \(.message)"' >&2
+        return 1
+    fi
+
+    return 0
+}
+
+# Function: Revoke a token by NAME instead of id. Used at teardown for the
+# app-facing (upload bucket) token, whose id was never stored anywhere local
+# to IaCarus - it only ever lived in the Rails app's own credentials. Looks
+# the token up by exact name via the account tokens list, then deletes it.
+#
+#   cloudflare_delete_token_by_name <TOKEN_NAME>
+#
+# Returns 0 if deleted OR if no matching token was found (already gone is not
+# an error). Returns 1 only on an actual Cloudflare API failure.
+function cloudflare_delete_token_by_name() {
+    local TOKEN_NAME=$1
+
+    if [[ -z "$CF_API_BEARER_TOKEN" || -z "$CF_ACCOUNT_ID" ]]; then
+        echo -e "${C_ERROR}❌ Missing CF_API_BEARER_TOKEN or CF_ACCOUNT_ID.${C_RESET}" >&2
+        return 1
+    fi
+
+    local RESP
+    RESP=$(curl -s -X GET "${CF_API_BASE}/accounts/${CF_ACCOUNT_ID}/tokens" \
+        -H "Authorization: Bearer ${CF_API_BEARER_TOKEN}" \
+        -H "Content-Type: application/json")
+
+    if [ "$(echo "$RESP" | jq -r '.success')" != "true" ]; then
+        echo -e "${C_ERROR}❌ Cloudflare token lookup failed:${C_RESET}" >&2
+        echo "$RESP" | jq -r '.errors[]? | "   [\(.code)] \(.message)"' >&2
+        return 1
+    fi
+
+    local FOUND_ID
+    FOUND_ID=$(echo "$RESP" | jq -r --arg name "$TOKEN_NAME" '.result[] | select(.name==$name) | .id' | head -n1)
+
+    if [ -z "$FOUND_ID" ]; then
+        echo -e "${C_WARN}⚠️  No token named '$TOKEN_NAME' found - already gone.${C_RESET}" >&2
+        return 0
+    fi
+
+    cloudflare_delete_token "$FOUND_ID"
+}

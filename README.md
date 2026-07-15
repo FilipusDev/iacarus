@@ -139,6 +139,32 @@ SSH_PRIVATE_KEY_PATH=${SSH_KEY_PATH}
 For the next steps, you might need to provide a valid international credit card.
 Despite the generous free tier, Zero Trust and R2 Storage have paid features.
 
+#### CLOUDFLARE API BEARER TOKEN (APP ORCHESTRATOR TOKEN FACTORY)
+
+Used by `make vps-app-add` / `make vps-app-remove` to programmatically **mint**
+and **revoke** per-app, bucket-scoped R2 tokens. This is a high-level token -
+keep it safe. The per-app child tokens it creates are locked to only that app's
+two buckets.
+
+1. Access your cloudflare account: <https://dash.cloudflare.com>
+2. "Manage Account" > "Account API Tokens" > "Create Token" > custom token.
+3. Add TWO account permissions:
+   - "API Tokens" : Edit (to create/delete tokens).
+   - "Workers R2 Storage" : Edit (you can only grant R2 perms you hold).
+4. Scope "Account Resources" to your account, set the TTL, and create it.
+5. Optional, but recommended, configure the "Client IP Address Filtering".
+
+In the `.env` fill the variables:
+
+```env
+# your canonical Cloudflare Account ID ("Overview" > 'Account Details').
+# Shared by the token factory AND the R2 S3 endpoint further down.
+CF_ACCOUNT_ID=
+
+# the bearer token value created in step #2 above.
+CF_API_BEARER_TOKEN=
+```
+
 #### CLOUDFLARE ZERO TRUST TUNNEL
 
 1. Access your cloudflare account: <https://dash.cloudflare.com>
@@ -178,26 +204,23 @@ CF_TUNNEL_TOKEN=
 In the `.env` fill the variables:
 
 ```env
-# cloudflare R2 storage tokens
+# cloudflare R2 storage token
 
-#  10. this info is either with the #12 or in the "Overview" page
-#      (under 'Account Details' session)
-CF_R2_ACCOUNT_ID=
-
-#  11. copy the value under "Token value" label.
+#  10. copy the value under "Token value" label.
 CF_R2_TOKEN=
 
 # cloudflare R2 storage tokens : S3 interface
 
-#  12. check this value under "Use jurisdiction-specific endpoints
+#  11. check this value under "Use jurisdiction-specific endpoints
 #      for S3 clients:" label or in the "Overview" page
-#      (under 'Account Details' session)
-CF_R2_S3_CLIENT_URL=https://${CF_R2_ACCOUNT_ID}.r2.cloudflarestorage.com
+#      (under 'Account Details' session). It reuses the CF_ACCOUNT_ID set in
+#      the API bearer token section above.
+CF_R2_S3_CLIENT_URL=https://${CF_ACCOUNT_ID}.r2.cloudflarestorage.com
 
-#  13. copy the value under "Access Key ID" label.
+#  12. copy the value under "Access Key ID" label.
 CF_R2_S3_CLIENT_ACCESS_KEY_ID=
 
-#  14. copy the value under "Secret Access Key" label.
+#  13. copy the value under "Secret Access Key" label.
 CF_R2_S3_CLIENT_SECRET_ACCESS_KEY=
 
 ```

@@ -9,7 +9,7 @@ echo "----------------------------------------"
 
 # 1. Dependency Check
 echo -e "${C_INFO}🔍 Checking dependencies...${C_RESET}"
-DEPS=("hcloud" "aws" "make" "nc")
+DEPS=("hcloud" "aws" "make" "nc" "curl" "jq")
 MISSING=0
 
 for cmd in "${DEPS[@]}"; do

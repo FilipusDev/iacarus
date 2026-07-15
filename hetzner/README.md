@@ -320,6 +320,184 @@ Enter number (or 'q' to quit): 1
 ✅ Cleaned up.
 ```
 
+### make vps-app-add
+
+`make vps-app-add` is the **high-level multi-tenant orchestrator**. Where
+`make vps-litestream-add` wires up a single database against a pre-existing
+bucket and pre-existing shared credentials, `vps-app-add` provisions a whole
+client app **end-to-end in one run**, chaining together the buckets, TWO
+freshly minted, mutually **isolated** bucket-scoped credentials, and the
+Litestream registration.
+
+Given a `PROJECT_CODE` (e.g. `ccg-2026-0001`), an `APP_LABEL` (e.g. `mpl`) and
+an `ENVIRONMENT` (default `prd`), it:
+
+1. Computes the golden-format bucket names and creates **both** in R2
+   (idempotently - existing buckets are skipped):
+   - `cf-bucket-<PROJECT_CODE>-<APP_LABEL>-<ENVIRONMENT>-bkp` (private backup)
+   - `cf-bucket-<PROJECT_CODE>-<APP_LABEL>-<ENVIRONMENT>-upl` (app-facing
+     upload bucket - **private by default**, same as any other R2 bucket; see
+     the note below if you need it reachable from the open internet)
+2. Mints **TWO separate account-owned R2 API tokens**, each locked to
+   **exactly one** of the two buckets (`cloudflare_create_scoped_token` in
+   `utils.sh`), both carrying the R2 bucket-item **read + write** permission
+   groups. A token's `id` becomes its S3 **Access Key ID** and the SHA-256 of
+   its raw value becomes its **Secret Access Key** - the raw value never
+   touches disk. This is deliberately **not** one shared token for both
+   buckets: the credential you hand to the Rails app (upload bucket) can never
+   reach the backup bucket that Litestream depends on, even if the app is
+   compromised.
+3. Registers the app's SQLite DB into Litestream on a chosen box, wired to the
+   **backup-bucket token only**. If Litestream fails to restart, **both**
+   freshly minted tokens are **rolled back** (revoked) automatically so no
+   orphan credential is left behind.
+4. Prints a confirmation block (secrets masked) followed by a **copy-paste
+   snippet** carrying the **unmasked upload-bucket credential** (only that
+   one - the backup credential never leaves `/etc/litestream.yml`), ready to
+   drop into your Rails app's encrypted credentials.
+
+> The `CF_API_BEARER_TOKEN` used to mint child tokens needs the account
+> permissions `API Tokens:Edit` + `Workers R2 Storage:Edit` (see `example.env`).
+
+> **Public access is NOT configured by this tool.** `cf-bucket-...-upl` is
+> created as a private bucket like any other - the "upl" naming is intent, not
+> an access-control statement. If the app needs to serve its contents over the
+> open internet, enable "Public Access" or bind a Custom Domain for that
+> specific bucket manually in the Cloudflare R2 dashboard (a one-time, per-app
+> step). That's an entirely separate Cloudflare feature (DNS/zone-bound) from
+> the S3-credential scoping this orchestrator automates.
+
+```sh
+iacarus/hetzner main ❯ make vps-app-add
+
+🔍 Checking Pre-requisites...
+
+🧩 Client app identity...
+>  Project code (e.g. 'ccg-2026-0001'): ccg-2026-0001
+>  App label (e.g. 'mpl'): mpl
+>  Environment [prd]: prd
+   Backup (private): cf-bucket-ccg-2026-0001-mpl-prd-bkp
+   Upload (public):  cf-bucket-ccg-2026-0001-mpl-prd-upl
+🔍 Checking if cf-bucket-ccg-2026-0001-mpl-prd-bkp exists...
+🚰 Creating bucket 'cf-bucket-ccg-2026-0001-mpl-prd-bkp'...
+✅ Bucket created successfully!
+🔍 Checking if cf-bucket-ccg-2026-0001-mpl-prd-upl exists...
+🚰 Creating bucket 'cf-bucket-ccg-2026-0001-mpl-prd-upl'...
+✅ Bucket created successfully!
+
+🔍 Fetching server list from Hetzner...
+Select a server:
+1) ***949:hetzner-vps-1:<IPv4-IP>:running
+Enter number (or 'q' to quit): 1
+
+🔌 Testing connection to hetzner-vps-1... OK
+
+🗄️  Litestream target on hetzner-vps-1...
+>  Full path to the SQLite DB inside its Docker volume (...): /var/lib/docker/volumes/mpl_data/_data/production.sqlite3
+🔍 Checking for an existing entry on hetzner-vps-1...
+🔐 Minting scoped R2 token 'iacarus-ccg-2026-0001-mpl-prd-bkp' (backup bucket only)...
+✅ Token minted. Access Key ID: ****************************
+🔐 Minting scoped R2 token 'iacarus-ccg-2026-0001-mpl-prd-upl' (upload bucket only)...
+✅ Token minted. Access Key ID: ****************************
+📝 Appending 'mpl' (... -> cf-bucket-ccg-2026-0001-mpl-prd-bkp) to /etc/litestream.yml...
+🔄 Restarting litestream...
+✅ 'mpl' registered and replicating to 'cf-bucket-ccg-2026-0001-mpl-prd-bkp'.
+
+------------------------------------------------
+🎉 APP PROVISIONED: ccg-2026-0001-mpl-prd
+------------------------------------------------
+   Project code : ccg-2026-0001
+   App label    : mpl
+   Environment  : prd
+   Server       : hetzner-vps-1
+   DB path      : /var/lib/docker/volumes/mpl_data/_data/production.sqlite3
+------------------------------------------------
+   Backup bucket: cf-bucket-ccg-2026-0001-mpl-prd-bkp (private, Litestream replica)
+     token      : iacarus-ccg-2026-0001-mpl-prd-bkp
+     access key : **************************** (secret lives only in /etc/litestream.yml, 0600 root)
+   Upload bucket: cf-bucket-ccg-2026-0001-mpl-prd-upl (app-facing; see snippet below for its credential)
+     token      : iacarus-ccg-2026-0001-mpl-prd-upl
+------------------------------------------------
+   Reminder: if the R2 token has Client IP Address Filtering,
+   allowlist hetzner-vps-1 so replication can reach R2.
+   Reminder: 'cf-bucket-ccg-2026-0001-mpl-prd-upl' is PRIVATE by default - if you need it
+   reachable over the open internet, enable Public Access / bind a Custom
+   Domain for it manually in the R2 dashboard (this is a one-time,
+   per-app step this tool intentionally does not automate).
+------------------------------------------------
+
+⚠️  SHOWN ONCE - Cloudflare never returns this secret again. Copy it now.
+=============================================================================
+📋 COPY-PASTE SNIPPET FOR YOUR RAILS APP CREDENTIALS (upload bucket only)
+=============================================================================
+# 1. Add these to your Rails encrypted credentials (e.g. EDITOR=vim bin/rails
+#    credentials:edit --environment=prd):
+r2:
+  public_bucket: "cf-bucket-ccg-2026-0001-mpl-prd-upl"
+  access_key_id: "****************************"
+  secret_access_key: "****************************************************************"
+  endpoint: "https://<account-id>.r2.cloudflarestorage.com"
+#
+# 2. Reference them inside config/storage.yml using your standard patterns.
+# This credential can ONLY reach 'cf-bucket-ccg-2026-0001-mpl-prd-upl' - it has no access to the
+# backup bucket, even if this app is compromised.
+=============================================================================
+```
+
+### make vps-app-remove
+
+`make vps-app-remove` is the matching **teardown wizard**. Each app has two
+isolated tokens (see above), and only the backup one has an id recorded
+locally (inside `/etc/litestream.yml`) - the upload token only ever lived in
+the Rails app's own credentials, so IaCarus keeps no local record of it. This
+script:
+
+1. Pulls the app's registration block out of `/etc/litestream.yml` to recover
+   the backup token's id (stored as `access-key-id`) and its bucket name.
+2. Derives the app slug from that bucket name to reconstruct the sibling
+   upload bucket/token names - no separate registry file is needed.
+3. **Revokes both scoped tokens in Cloudflare**: the backup one by id
+   (`cloudflare_delete_token`), the upload one by name lookup
+   (`cloudflare_delete_token_by_name`, since only its name is derivable).
+4. Deregisters the database from Litestream.
+
+It uses the same "Safety Lock" (type the label to confirm) as `make vps-down`.
+
+It does **not** delete the R2 buckets or their objects - only the live
+credentials are neutralized and replication stops. Remove buckets separately
+via `cd cloudflare && make bucket-delete`. A legacy entry that used the shared
+account S3 key (rather than a per-app token) is handled gracefully: token
+revocation is skipped/warned and the Litestream deregistration still proceeds.
+
+```sh
+iacarus/hetzner main ❯ make vps-app-remove
+
+🔍 Checking Pre-requisites...
+🔍 Fetching server list from Hetzner...
+Select a server:
+1) ***949:hetzner-vps-1:<IPv4-IP>:running
+Enter number (or 'q' to quit): 1
+
+🔌 Testing connection to hetzner-vps-1... OK
+
+🗑️  Decommissioning a client app on hetzner-vps-1...
+>  App label to remove (as given to 'make vps-app-add'): mpl
+🔍 Checking for 'mpl' on hetzner-vps-1...
+🔎 Recovering the scoped token id from /etc/litestream.yml...
+   Backup token id (Access Key ID): ****************************
+   Upload-bucket token to revoke: iacarus-ccg-2026-0001-mpl-prd-upl (bucket 'cf-bucket-ccg-2026-0001-mpl-prd-upl' is NOT deleted)
+⚠️  This revokes BOTH the backup and upload R2 credentials and stops backups for 'mpl'.
+    R2 buckets and existing objects are NOT deleted.
+>  Type 'mpl' to confirm: mpl
+🔐 Revoking backup-bucket R2 token '****************************' in Cloudflare...
+✅ Backup token revoked.
+🔐 Revoking upload-bucket R2 token 'iacarus-ccg-2026-0001-mpl-prd-upl' in Cloudflare...
+✅ Upload token revoked (or was already gone).
+📝 Removing 'mpl' from /etc/litestream.yml...
+🔄 Restarting litestream...
+✅ 'mpl' deregistered. Credential neutralized; R2 data retained.
+```
+
 ### make vps-smoke-tunnel
 
 This script assumes you have already created a Zero Trust Tunnel for smoke tests
