@@ -357,7 +357,7 @@ an `ENVIRONMENT` (default `prd`), it:
    drop into your Rails app's encrypted credentials.
 
 > The `CF_API_BEARER_TOKEN` used to mint child tokens needs the account
-> permissions `API Tokens:Edit` + `Workers R2 Storage:Edit` (see `example.env`).
+> permissions `API Tokens:Edit` + `Workers R2 Storage:Edit` (see `.env.example`).
 
 > **Public access is NOT configured by this tool.** `cf-bucket-...-upl` is
 > created as a private bucket like any other - the "upl" naming is intent, not

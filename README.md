@@ -101,9 +101,13 @@ During the process you might need to provide a payment method.
 
 4. **make, nc:** pretty standard.
 
+5. **curl, jq:** used to talk to the Cloudflare API directly (token minting/
+   revocation for the multi-tenant app orchestrator, `make vps-app-add` /
+   `make vps-app-remove`).
+
 ## 📝 Configuration
 
-Copy `example.env` to `.env` and fill with your configuration secrets.
+Copy `.env.example` to `.env` and fill with your configuration secrets.
 
 ### SSH Keys
 
@@ -271,8 +275,8 @@ iacarus main ❯ make setup
 🚀 Ready to fly!
 ----------------------------------------
 1. Edit .env with your secrets.
-2. Go to 'hetzner/' to create servers:  cd hetzner && make new
-3. Go to 'cloudflare/' to manage R2:    cd cloudflare && make new
+2. Go to 'hetzner/' to create servers:  cd hetzner && make vps-new
+3. Go to 'cloudflare/' to manage R2:    cd cloudflare && make bucket-new
 ----------------------------------------
 
 ```
