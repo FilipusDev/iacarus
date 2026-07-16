@@ -346,7 +346,11 @@ an `ENVIRONMENT` (default `prd`), it:
    `utils.sh`), both carrying the R2 bucket-item **read + write** permission
    groups. A token's `id` becomes its S3 **Access Key ID** and the SHA-256 of
    its raw value becomes its **Secret Access Key** - the raw value never
-   touches disk. This is deliberately **not** one shared token for both
+   touches disk. Each name carries a **UTC timestamp suffix**
+   (`iacarus-<slug>-bkp-20260715T224500Z`) so a re-provision that reuses the
+   same app slug - e.g. a disaster recovery onto a fresh box - mints
+   distinguishable names instead of duplicates you can't tell apart later.
+   This is deliberately **not** one shared token for both
    buckets: the credential you hand to the Rails app (upload bucket) can never
    reach the backup bucket that Litestream depends on, even if the app is
    compromised.
@@ -408,9 +412,9 @@ Enter number (or 'q' to quit): 1
 🗄️  Litestream target on hetzner-vps-1...
 >  Full path to the SQLite DB inside its Docker volume (...): /var/lib/docker/volumes/mpl_data/_data/production.sqlite3
 🔍 Checking for an existing entry on hetzner-vps-1...
-🔐 Minting scoped R2 token 'iacarus-ccg-2026-0001-mpl-prd-bkp' (backup bucket only)...
+🔐 Minting scoped R2 token 'iacarus-ccg-2026-0001-mpl-prd-bkp-20260715T224500Z' (backup bucket only)...
 ✅ Token minted. Access Key ID: ****************************
-🔐 Minting scoped R2 token 'iacarus-ccg-2026-0001-mpl-prd-upl' (upload bucket only)...
+🔐 Minting scoped R2 token 'iacarus-ccg-2026-0001-mpl-prd-upl-20260715T224500Z' (upload bucket only)...
 ✅ Token minted. Access Key ID: ****************************
 📝 Appending 'mpl' (... -> cf-bucket-ccg-2026-0001-mpl-prd-bkp) to /etc/litestream.yml...
 🔄 Restarting litestream...
@@ -426,10 +430,10 @@ Enter number (or 'q' to quit): 1
    DB path      : /var/lib/docker/volumes/mpl_data/_data/production.sqlite3
 ------------------------------------------------
    Backup bucket: cf-bucket-ccg-2026-0001-mpl-prd-bkp (private, Litestream replica)
-     token      : iacarus-ccg-2026-0001-mpl-prd-bkp
+     token      : iacarus-ccg-2026-0001-mpl-prd-bkp-20260715T224500Z
      access key : **************************** (secret lives only in /etc/litestream.yml, 0600 root)
    Upload bucket: cf-bucket-ccg-2026-0001-mpl-prd-upl (app-facing; see snippet below for its credential)
-     token      : iacarus-ccg-2026-0001-mpl-prd-upl
+     token      : iacarus-ccg-2026-0001-mpl-prd-upl-20260715T224500Z
 ------------------------------------------------
    Reminder: if the R2 token has Client IP Address Filtering,
    allowlist hetzner-vps-1 so replication can reach R2.
@@ -468,10 +472,12 @@ script:
 1. Pulls the app's registration block out of `/etc/litestream.yml` to recover
    the backup token's id (stored as `access-key-id`) and its bucket name.
 2. Derives the app slug from that bucket name to reconstruct the sibling
-   upload bucket/token names - no separate registry file is needed.
-3. **Revokes both scoped tokens in Cloudflare**: the backup one by id
-   (`cloudflare_delete_token`), the upload one by name lookup
-   (`cloudflare_delete_token_by_name`, since only its name is derivable).
+   upload bucket/token-name **prefix** - no separate registry file is needed.
+3. **Revokes the scoped tokens in Cloudflare**: the backup one by id
+   (`cloudflare_delete_token`); the upload one(s) by **prefix sweep**
+   (`cloudflare_delete_tokens_by_prefix`) - since names carry a timestamp
+   suffix, this matches the current token *and* cleans up any orphans left by
+   earlier re-provisions/recoveries that reused the same slug.
 4. Deregisters the database from Litestream.
 
 It uses the same "Safety Lock" (type the label to confirm) as `make vps-down`.
@@ -498,14 +504,15 @@ Enter number (or 'q' to quit): 1
 🔍 Checking for 'mpl' on hetzner-vps-1...
 🔎 Recovering the scoped token id from /etc/litestream.yml...
    Backup token id (Access Key ID): ****************************
-   Upload-bucket token to revoke: iacarus-ccg-2026-0001-mpl-prd-upl (bucket 'cf-bucket-ccg-2026-0001-mpl-prd-upl' is NOT deleted)
+   Upload-bucket token(s) to revoke: iacarus-ccg-2026-0001-mpl-prd-upl-* (bucket 'cf-bucket-ccg-2026-0001-mpl-prd-upl' is NOT deleted)
 ⚠️  This revokes BOTH the backup and upload R2 credentials and stops backups for 'mpl'.
     R2 buckets and existing objects are NOT deleted.
 >  Type 'mpl' to confirm: mpl
 🔐 Revoking backup-bucket R2 token '****************************' in Cloudflare...
 ✅ Backup token revoked.
-🔐 Revoking upload-bucket R2 token 'iacarus-ccg-2026-0001-mpl-prd-upl' in Cloudflare...
-✅ Upload token revoked (or was already gone).
+🔐 Revoking upload-bucket R2 token(s) matching 'iacarus-ccg-2026-0001-mpl-prd-upl-*' in Cloudflare...
+   ✅ revoked iacarus-ccg-2026-0001-mpl-prd-upl-20260715T224500Z (****************************)
+✅ Upload token(s) revoked (or were already gone).
 📝 Removing 'mpl' from /etc/litestream.yml...
 🔄 Restarting litestream...
 ✅ 'mpl' deregistered. Credential neutralized; R2 data retained.

@@ -68,13 +68,19 @@ else
     echo -e "${C_INFO}   Backup token id (Access Key ID): ${C_RESET}${C_HIGH}$BKP_TOKEN_ID${C_RESET}"
 fi
 
-UPL_TOKEN_NAME=""
+# The upload token's name carries a timestamp suffix (see vps-rails-app-add.sh),
+# so we can't reconstruct its exact name - we match by PREFIX and sweep every
+# upload token for this app (including any orphans left by past re-provisions /
+# disaster recoveries onto a fresh box). The prefix intentionally omits the
+# timestamp; the prefix helper anchors on a trailing '-' so it also catches
+# legacy pre-timestamp names.
+UPL_TOKEN_PREFIX=""
 if [[ -n "$BKP_BUCKET" && "$BKP_BUCKET" == "${CF_R2_BUCKET_BASE_NAME}"*"-bkp" ]]; then
     APP_SLUG="${BKP_BUCKET#"$CF_R2_BUCKET_BASE_NAME"}"
     APP_SLUG="${APP_SLUG%-bkp}"
     UPL_BUCKET="${CF_R2_BUCKET_BASE_NAME}${APP_SLUG}-upl"
-    UPL_TOKEN_NAME="iacarus-${APP_SLUG}-upl"
-    echo -e "${C_INFO}   Upload-bucket token to revoke: ${C_RESET}${C_HIGH}$UPL_TOKEN_NAME${C_RESET}${C_INFO} (bucket '$UPL_BUCKET' is NOT deleted)${C_RESET}"
+    UPL_TOKEN_PREFIX="iacarus-${APP_SLUG}-upl"
+    echo -e "${C_INFO}   Upload-bucket token(s) to revoke: ${C_RESET}${C_HIGH}${UPL_TOKEN_PREFIX}-*${C_RESET}${C_INFO} (bucket '$UPL_BUCKET' is NOT deleted)${C_RESET}"
 else
     echo -e "${C_WARN}⚠️  Could not derive an app slug from bucket '$BKP_BUCKET' - will skip upload token revocation.${C_RESET}"
     echo -e "${C_WARN}    (Expected the 'make vps-app-add' naming convention: ${CF_R2_BUCKET_BASE_NAME}<slug>-bkp.)${C_RESET}"
@@ -102,12 +108,12 @@ if [ -n "$BKP_TOKEN_ID" ]; then
     fi
 fi
 
-if [ -n "$UPL_TOKEN_NAME" ]; then
-    echo -e "${C_INFO}🔐 Revoking upload-bucket R2 token '$UPL_TOKEN_NAME' in Cloudflare...${C_RESET}"
-    if cloudflare_delete_token_by_name "$UPL_TOKEN_NAME"; then
-        echo -e "${C_SUCCESS}✅ Upload token revoked (or was already gone).${C_RESET}"
+if [ -n "$UPL_TOKEN_PREFIX" ]; then
+    echo -e "${C_INFO}🔐 Revoking upload-bucket R2 token(s) matching '${UPL_TOKEN_PREFIX}-*' in Cloudflare...${C_RESET}"
+    if cloudflare_delete_tokens_by_prefix "$UPL_TOKEN_PREFIX"; then
+        echo -e "${C_SUCCESS}✅ Upload token(s) revoked (or were already gone).${C_RESET}"
     else
-        echo -e "${C_WARN}⚠️  Upload token lookup/revocation failed. Continuing.${C_RESET}"
+        echo -e "${C_WARN}⚠️  One or more upload token revocations failed. Continuing.${C_RESET}"
     fi
 fi
 
