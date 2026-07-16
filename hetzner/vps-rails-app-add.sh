@@ -108,8 +108,15 @@ fi
 #    across both buckets. This keeps them genuinely isolated: the credential
 #    handed to the Rails app (upload bucket) can never reach the backup
 #    bucket that Litestream depends on, and vice-versa.
-BKP_TOKEN_NAME="${TOKEN_NAME}-bkp"
-UPL_TOKEN_NAME="${TOKEN_NAME}-upl"
+# Timestamp suffix (UTC, sortable) so a re-provision that reuses the same app
+# slug - e.g. a disaster recovery onto a fresh box - mints DISTINGUISHABLE
+# token names instead of ones identical to the (now orphaned) originals. Same
+# stamp for both tokens so the pair stays visually correlated. Teardown
+# (make vps-app-remove) sweeps upload tokens by PREFIX, so this suffix never
+# breaks revocation - see cloudflare_delete_tokens_by_prefix in utils.sh.
+TOKEN_TS="$(date -u +%Y%m%dT%H%M%SZ)"
+BKP_TOKEN_NAME="${TOKEN_NAME}-bkp-${TOKEN_TS}"
+UPL_TOKEN_NAME="${TOKEN_NAME}-upl-${TOKEN_TS}"
 
 echo -e "${C_INFO}🔐 Minting scoped R2 token '${C_RESET}${C_HIGH}$BKP_TOKEN_NAME${C_RESET}${C_INFO}' (backup bucket only)...${C_RESET}"
 if ! cloudflare_create_scoped_token "$BKP_TOKEN_NAME" "$BKP_BUCKET"; then

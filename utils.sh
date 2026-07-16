@@ -300,3 +300,57 @@ function cloudflare_delete_token_by_name() {
 
     cloudflare_delete_token "$FOUND_ID"
 }
+
+# Function: Revoke EVERY token whose name matches a prefix - either exactly
+# equal to it (legacy, pre-timestamp names) or the prefix followed by a '-'
+# (the timestamped form vps-rails-app-add.sh mints). Used at teardown for the
+# app-facing (upload) tokens, whose ids were never stored locally and which
+# may have accumulated across re-provisions / disaster recoveries that reused
+# the same app slug. The trailing-dash anchor keeps a prefix like
+# 'iacarus-<slug>-upl' from matching a longer sibling type name.
+#
+#   cloudflare_delete_tokens_by_prefix <PREFIX>
+#
+# Returns 0 if all matches were deleted OR none were found (already gone is
+# not an error). Returns 1 on a lookup failure or if any single deletion fails.
+function cloudflare_delete_tokens_by_prefix() {
+    local PREFIX=$1
+
+    if [[ -z "$CF_API_BEARER_TOKEN" || -z "$CF_ACCOUNT_ID" ]]; then
+        echo -e "${C_ERROR}❌ Missing CF_API_BEARER_TOKEN or CF_ACCOUNT_ID.${C_RESET}" >&2
+        return 1
+    fi
+
+    local RESP
+    RESP=$(curl -s -X GET "${CF_API_BASE}/accounts/${CF_ACCOUNT_ID}/tokens" \
+        -H "Authorization: Bearer ${CF_API_BEARER_TOKEN}" \
+        -H "Content-Type: application/json")
+
+    if [ "$(echo "$RESP" | jq -r '.success')" != "true" ]; then
+        echo -e "${C_ERROR}❌ Cloudflare token lookup failed:${C_RESET}" >&2
+        echo "$RESP" | jq -r '.errors[]? | "   [\(.code)] \(.message)"' >&2
+        return 1
+    fi
+
+    local MATCHES
+    MATCHES=$(echo "$RESP" | jq -r --arg p "$PREFIX" \
+        '.result[] | select(.name == $p or (.name | startswith($p + "-"))) | "\(.id) \(.name)"')
+
+    if [ -z "$MATCHES" ]; then
+        echo -e "${C_WARN}⚠️  No token matching '$PREFIX' found - already gone.${C_RESET}" >&2
+        return 0
+    fi
+
+    local rc=0 id name
+    while IFS=' ' read -r id name; do
+        [ -z "$id" ] && continue
+        if cloudflare_delete_token "$id"; then
+            echo -e "${C_SUCCESS}   ✅ revoked ${name} (${id})${C_RESET}" >&2
+        else
+            echo -e "${C_ERROR}   ⚠️  failed to revoke ${name} (${id})${C_RESET}" >&2
+            rc=1
+        fi
+    done <<< "$MATCHES"
+
+    return $rc
+}
