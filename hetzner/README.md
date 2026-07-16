@@ -2,6 +2,9 @@
 
 Run from the repo root: `cd hetzner`.
 
+> If a client's box has actually died (not a planned teardown), stop
+> reading here and go to [`DISASTER_RECOVERY.md`](./DISASTER_RECOVERY.md).
+
 ### make vps-new
 
 `make vps-new` will **automatically provision a new server**.
