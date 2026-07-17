@@ -123,7 +123,7 @@ boxes' health endpoint can call the same code. **Don't** duplicate the parsing.
 
 ---
 
-### A3 🔴 Bake R2 CORS into `vps-app-add` (upl bucket)
+### A3 🟢 Bake R2 CORS into `vps-app-add` (upl bucket)
 
 **Why:** the app-facing **upl** bucket needs browser CORS for direct
 PUT/GET uploads. Decision: **bake into `vps-app-add`** (no standalone target) -
@@ -147,21 +147,21 @@ CORS applied right after the upl bucket is created.
   `aws s3api put-bucket-cors` against `$CF_R2_S3_CLIENT_URL` (mirror the aws-cli
   usage already in `r2-provision.sh`). Build the JSON with `jq -n` (like
   `cloudflare_create_scoped_token`), never string-concat.
-- In `hetzner/vps-rails-app-add.sh`, after the upl bucket exists (step 4), prompt
-  for the public origin with a sensible default derived from `$APP_LABEL`
-  (e.g. `https://${APP_LABEL}.<base-domain>` → first use resolves to
-  `https://mpl.filipus.dev.br`), then apply. Idempotent (re-running re-puts the
-  same policy). Only the **upl** bucket gets CORS; the bkp bucket never does.
+- In `hetzner/vps-rails-app-add.sh`, as step 4b (after the buckets exist, BEFORE
+  any token is minted so a bad origin aborts with no orphan credentials), prompt
+  for the public origin(s) and apply. Idempotent (re-running re-puts the same
+  policy). Only the **upl** bucket gets CORS; the bkp bucket never does.
 - Surface the applied origin in the final provisioning summary block.
 
 **Acceptance**
-- `make vps-app-add` for `mpl` yields an upl bucket with exactly the policy above.
+- `make vps-app-add` yields an upl bucket with exactly the policy above.
 - Re-running the same app doesn't error or duplicate.
-- Origin is promptable/overridable, defaulting per app label.
+- Origin is fully typed at the prompt (comma-separated for multiple).
 
-**Open Q**
-- Where does `<base-domain>` live? Suggest a `CF_APP_BASE_DOMAIN` in `.env` /
-  `config.sh` (e.g. `filipus.dev.br`) so the default origin is derivable.
+**Open Q → RESOLVED:** no shared base domain. One box hosts many apps on
+unrelated domains (`client-a.com`, `client-b.com.br`, …), so there is no useful
+`<base-domain>` to derive a default from - step 4b simply prompts for the full
+origin(s) every time. The `CF_APP_BASE_DOMAIN` idea was dropped.
 
 ---
 
@@ -280,8 +280,8 @@ a laptop. Optional - the viewer already runs locally (B1).
 ## 📌 Decisions locked (do not relitigate)
 
 - Historical stats collector = **`sysstat`/sar** (A0).
-- CORS delivery = **baked into `vps-app-add`**, upl bucket only, origin
-  parameterized (A3).
+- CORS delivery = **baked into `vps-app-add`**, upl bucket only, origin(s) typed
+  fully at the prompt - no shared base domain (A3, done).
 - SPRINT B build = **Hybrid** (Glances for HW, home-grown sh for apps).
 - MON viewer = **stateless + portable**; data lives on app boxes; local and
   dedicated-box are the same viewer.
@@ -293,6 +293,5 @@ a laptop. Optional - the viewer already runs locally (B1).
 1. A0: sysstat sampling interval (default 10-min too coarse for a 30-min window?).
 2. A1: `vps-doctor` separate target vs. `vps-stats --clean`; guard for
    `docker prune --volumes`.
-3. A3: where `<base-domain>` for the default CORS origin lives (`CF_APP_BASE_DOMAIN`?).
-4. B0: app health registry = litestream-label-derived vs. a `mon.d` config file.
-5. B2: glances server bind/auth (localhost+tunnel assumed).
+3. B0: app health registry = litestream-label-derived vs. a `mon.d` config file.
+4. B2: glances server bind/auth (localhost+tunnel assumed).
