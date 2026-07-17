@@ -74,6 +74,28 @@ for BUCKET in "$BKP_BUCKET" "$UPL_BUCKET"; do
     fi
 done
 
+# 4b. Apply a browser CORS policy to the app-facing (upl) bucket so the Rails app
+#     can presign direct PUT/GET uploads from the browser. The private backup
+#     bucket NEVER gets CORS. Done here - before any token is minted - so a bad
+#     origin aborts cleanly with no orphaned credentials to roll back. put-bucket-
+#     cors replaces the whole policy each run, so re-provisioning is idempotent.
+echo -e "\n${C_INFO}🌐 CORS for the upload bucket...${C_RESET}"
+echo -n ">  Allowed origin(s), comma-separated (e.g. https://client-a.com): "
+read CORS_ORIGIN
+
+if [ -z "$CORS_ORIGIN" ]; then
+    echo -e "${C_ERROR}❌ An allowed origin is required for the upload bucket. Aborted.${C_RESET}"
+    exit 1
+fi
+
+echo -e "${C_INFO}🌐 Applying CORS (${C_RESET}${C_HIGH}$CORS_ORIGIN${C_RESET}${C_INFO}) to '$UPL_BUCKET'...${C_RESET}"
+if r2_put_bucket_cors "$UPL_BUCKET" "$CORS_ORIGIN"; then
+    echo -e "${C_SUCCESS}✅ CORS applied (GET, PUT; ETag exposed; max-age 3600).${C_RESET}"
+else
+    echo -e "${C_ERROR}❌ Could not apply CORS to '$UPL_BUCKET'. Aborted.${C_RESET}"
+    exit 1
+fi
+
 # 5. Get Server Details (Sets $SELECTED_NAME)
 select_server_interactive
 
@@ -172,6 +194,7 @@ echo -e "     token      : ${C_HIGH}$BKP_TOKEN_NAME${C_RESET}"
 echo -e "     access key : ${C_HIGH}$BKP_ACCESS_KEY_ID${C_RESET} ${C_INFO}(secret lives only in /etc/litestream.yml, 0600 root)${C_RESET}"
 echo -e "   Upload bucket: ${C_HIGH}$UPL_BUCKET${C_RESET} ${C_INFO}(app-facing; see snippet below for its credential)${C_RESET}"
 echo -e "     token      : ${C_HIGH}$UPL_TOKEN_NAME${C_RESET}"
+echo -e "     CORS origin: ${C_HIGH}$CORS_ORIGIN${C_RESET} ${C_INFO}(GET, PUT; ETag exposed; max-age 3600)${C_RESET}"
 echo -e "${C_SUCCESS}------------------------------------------------${C_RESET}"
 echo -e "   ${C_WARN}Reminder:${C_RESET} if the R2 token has Client IP Address Filtering,"
 echo -e "   allowlist $SELECTED_NAME so replication can reach R2."

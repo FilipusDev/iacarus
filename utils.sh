@@ -354,3 +354,55 @@ function cloudflare_delete_tokens_by_prefix() {
 
     return $rc
 }
+
+# --- FUNCTIONS R2 (S3 API) ---
+
+# Function: Apply a browser CORS policy to an R2 bucket over the S3 API so a web
+# app can PUT/GET objects directly (e.g. presigned uploads from a Rails front
+# end). put-bucket-cors REPLACES the bucket's entire CORS configuration on every
+# call, so this is idempotent - re-running simply re-puts the same policy. Only
+# the allowed origin(s) vary; the methods (GET/PUT), headers (*), exposed header
+# (ETag) and max-age (3600 s) are fixed to exactly what a direct browser upload
+# needs.
+#
+#   r2_put_bucket_cors <BUCKET> <ORIGIN[,ORIGIN...]>
+#
+# ORIGIN may be a single origin or a comma-separated list (blanks trimmed).
+# Returns 0 on success, 1 on bad input or any aws-cli failure.
+function r2_put_bucket_cors() {
+    local BUCKET=$1
+    local ORIGINS_CSV=$2
+
+    if [[ -z "$BUCKET" || -z "$ORIGINS_CSV" ]]; then
+        echo -e "${C_ERROR}❌ r2_put_bucket_cors: a bucket and at least one origin are required.${C_RESET}" >&2
+        return 1
+    fi
+
+    # Split the comma-separated origins into a JSON array (trim surrounding
+    # whitespace, drop empties) - jq builds it so origins are escaped properly.
+    local ORIGINS_JSON
+    ORIGINS_JSON=$(printf '%s' "$ORIGINS_CSV" \
+        | jq -Rc 'split(",") | map(gsub("^\\s+|\\s+$";"")) | map(select(length > 0))')
+
+    if [ "$(echo "$ORIGINS_JSON" | jq 'length')" -eq 0 ]; then
+        echo -e "${C_ERROR}❌ r2_put_bucket_cors: no valid origin in '$ORIGINS_CSV'.${C_RESET}" >&2
+        return 1
+    fi
+
+    local CORS_JSON
+    CORS_JSON=$(jq -nc --argjson origins "$ORIGINS_JSON" '
+        {
+          CORSRules: [ {
+            AllowedOrigins: $origins,
+            AllowedMethods: ["GET", "PUT"],
+            AllowedHeaders: ["*"],
+            ExposeHeaders: ["ETag"],
+            MaxAgeSeconds: 3600
+          } ]
+        }')
+
+    aws s3api put-bucket-cors \
+        --bucket "$BUCKET" \
+        --cors-configuration "$CORS_JSON" \
+        --endpoint-url "$CF_R2_S3_CLIENT_URL"
+}
