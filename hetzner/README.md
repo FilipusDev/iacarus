@@ -213,6 +213,195 @@ Enter number (or 'q' to quit): 2
 
 ```
 
+### make vps-stats
+
+`make vps-stats` prints a **read-only** health "sense" of a chosen box - it
+writes **nothing** to the server, so it's safe to run any time.
+
+It shows:
+
+- **Load average** (1/5/15 min) straight from `/proc/loadavg`, coloured against
+  the core count (`1.0` per core = 100% busy).
+- A **windows table** - `now / 5m / 15m / 30m / 1h` - for **CPU busy %**,
+  **memory used %**, **disk tps** (I/O transactions) and **network rx/tx**. The
+  `now` column is a live 1-second sample; the longer windows come from `sar`
+  (see `make vps-stats-enable`). A `-` means "no sample landed in that window
+  yet".
+- **Memory + swap**, **disk space** (per mount, `use%` colour-coded), and the
+  **top processes** by CPU and by memory.
+
+Servers created by `make vps-new` collect `sar` history out of the box. On a box
+provisioned before that landed, run `make vps-stats-enable` once (the longer
+windows will show `-` until then).
+
+```sh
+iacarus/hetzner main ❯ make vps-stats
+
+🔍 Fetching server list from Hetzner...
+Select a server:
+1) ***527010:hetzner-vps-2:<IPv4-IP>:running
+Enter number (or 'q' to quit): 1
+
+🔌 Testing connection to hetzner-vps-2... OK
+
+📊 Stats for hetzner-vps-2...
+========================================
+
+🖥️  hetzner-vps-2  |  up 1 day, 9 hours, 16 minutes  |  2 vCPU  |  6.8.0-134-generic
+   load avg (1/5/15): 0.52 / 0.15 / 0.04   (1.0 per core = 100%)
+
+   window ->          now      5m     15m     30m      1h
+   cpu busy %           2       2       2       3       2
+   mem used %          25      16      16      16      16
+   disk tps             3       2       3       3       2
+   net rx kB/s        0.3     0.4     0.4     0.6     0.5
+   net tx kB/s        0.4     0.6     0.6     1.0     0.7
+   (net iface: eth0; windows are today's samples)
+
+🧠 Memory
+   RAM : 1.0Gi used / 3.7Gi total  (2.7Gi available)
+   Swap: 0B used / 2.0Gi total
+
+💽 Disk space
+   mounted on                 Size   Used  Avail  use%
+   /                           38G   5.4G    31G  15%
+   /boot/efi                  253M   146K   252M  1%
+
+🏭 Top processes
+   by CPU:
+       1.9%cpu    3.8%mem  ruby
+       1.8%cpu    0.2%mem  systemd
+       0.6%cpu    0.2%mem  sshd
+   by MEM:
+       0.2%cpu    4.9%mem  ruby
+       1.9%cpu    3.8%mem  ruby
+       0.0%cpu    3.3%mem  ruby
+
+========================================
+```
+
+> The longer windows need historical samples. On Ubuntu 24.04 that collection
+> is driven by the `sysstat-collect` **systemd timer** (not cron - `debian-sa1`
+> self-suppresses under systemd); IaCarus overrides that timer to sample every
+> **2 minutes** so even the 5-minute window has data points.
+
+### make vps-stats-enable
+
+`make vps-stats-enable` retrofits `sar` history onto a box that was provisioned
+**before** it shipped, so `make vps-stats`'s 5/15/30-min and 1h windows light up.
+Fresh boxes (`make vps-new`) already have this from cloud-init - you only need
+this command on older ones.
+
+It's idempotent (safe to re-run): it installs `sysstat` if missing, turns on
+collection, drops a `sysstat-collect.timer` override to sample every 2 minutes,
+and primes the first sample immediately. It's the **only** part of the stats
+feature that writes to the box - `make vps-stats` itself stays strictly
+read-only.
+
+```sh
+iacarus/hetzner main ❯ make vps-stats-enable
+
+🔍 Fetching server list from Hetzner...
+Select a server:
+1) ***527010:hetzner-vps-2:<IPv4-IP>:running
+Enter number (or 'q' to quit): 1
+
+🔌 Testing connection to hetzner-vps-2... OK
+
+📈 Enabling sysstat on hetzner-vps-2...
+----------------------------------------
+✅ sysstat already installed.
+✅ sysstat collecting every 2 min (systemd timer).
+   Windows fill in over the next ~10 min - run 'make vps-stats' to watch.
+
+----------------------------------------
+✅ Done.
+```
+
+### make vps-doctor
+
+`make vps-doctor` helps you **reclaim disk space** - the classic
+"lots-of-deploys ate my disk with Docker and log crap" problem. It has two
+phases:
+
+1. **Inspect (read-only):** disk usage, the biggest top-level directories,
+   systemd journal size, Docker reclaimable space (`docker system df`), the apt
+   cache and how many packages are autoremovable, installed kernels, and `/tmp`.
+2. **Cleanup (opt-in):** each action is offered behind its own `y/N` prompt and
+   **defaults to No** - nothing runs unless you say yes:
+   - `docker system prune` (dangling images, stopped containers, networks,
+     build cache),
+   - `journalctl --vacuum-time=7d`,
+   - `apt-get clean` + `autoremove`,
+   - and, in a **double-guarded DANGER ZONE**, `docker volume prune` - off by
+     default because it can delete an app's data (e.g. a SQLite volume).
+
+Prompts run on **your** machine and each cleanup is a separate SSH call; the
+before/after free space on `/` is printed so the win is obvious.
+
+```sh
+iacarus/hetzner main ❯ make vps-doctor
+
+🔍 Fetching server list from Hetzner...
+Select a server:
+1) ***527010:hetzner-vps-2:<IPv4-IP>:running
+Enter number (or 'q' to quit): 1
+
+🔌 Testing connection to hetzner-vps-2... OK
+
+🩺 Inspecting hetzner-vps-2...
+----------------------------------------
+
+💽 Disk usage
+   /                   5.4G used of 38G   (15%)
+   /boot/efi           146K used of 253M  (1%)
+
+📂 Biggest directories under / (top 6, same filesystem)
+   1.9G	/var
+   1.4G	/usr
+   116M	/boot
+   11M	/home
+   6.8M	/etc
+   56K	/tmp
+
+🗒️  systemd journal
+   Archived and active journals take up 12.1M in the file system.
+
+🐳 Docker reclaimable
+   TYPE            TOTAL     ACTIVE    SIZE      RECLAIMABLE
+   Images          4         4         1.298GB   1.298GB (100%)
+   Containers      4         3         204.8kB   77.82kB (38%)
+   Local Volumes   2         2         5.049MB   0B (0%)
+   Build Cache     0         0         0B        0B
+
+📦 apt cache
+   263M in /var/cache/apt/archives
+   0 package(s) autoremovable
+
+🐧 Kernels
+   3 installed  (running: 6.8.0-134-generic)
+
+🌡️  /tmp
+   56K in /tmp
+
+----------------------------------------
+
+🧹 Cleanup - each step is opt-in (default No).
+Prune unused Docker data (dangling images, stopped containers, networks, build cache)? [y/N]: y
+Total reclaimed space: 1.298GB
+Vacuum the systemd journal down to the last 7 days? [y/N]: n
+Clean the apt cache and autoremove orphaned packages? [y/N]: y
+
+⚠️  DANGER ZONE - the next one can delete data.
+Prune unused Docker VOLUMES? (can DELETE app data - e.g. an app's SQLite volume) [y/N]: n
+
+----------------------------------------
+✅ Done.  Free on / :
+   before: 31G free (15% used)
+   after : 33G free (10% used)
+----------------------------------------
+```
+
 ### make vps-litestream-add
 
 `make vps-litestream-add` registers automated backups (via [Litestream](https://litestream.io))
@@ -341,6 +530,15 @@ an `ENVIRONMENT` (default `prd`), it:
    - `cf-bucket-<PROJECT_CODE>-<APP_LABEL>-<ENVIRONMENT>-upl` (app-facing
      upload bucket - **private by default**, same as any other R2 bucket; see
      the note below if you need it reachable from the open internet)
+
+   It then applies a browser **CORS** policy to the **upl** bucket for the
+   origin(s) you type at the prompt (`GET`/`PUT`, all request headers, `ETag`
+   exposed, 1 h max-age - what a browser needs to presign direct uploads). This
+   runs **before** any token is minted, so a bad origin aborts cleanly with no
+   orphaned credentials, and it's idempotent (the whole policy is replaced each
+   run). The private **bkp** bucket never gets CORS. There's no shared "base
+   domain" - one box hosts many apps on unrelated domains, so you enter the real
+   origin each time (comma-separate to allow several).
 2. Mints **TWO separate account-owned R2 API tokens**, each locked to
    **exactly one** of the two buckets (`cloudflare_create_scoped_token` in
    `utils.sh`), both carrying the R2 bucket-item **read + write** permission
@@ -402,6 +600,11 @@ iacarus/hetzner main ❯ make vps-app-add
 🚰 Creating bucket 'cf-bucket-ccg-2026-0001-mpl-prd-upl'...
 ✅ Bucket created successfully!
 
+🌐 CORS for the upload bucket...
+>  Allowed origin(s), comma-separated (e.g. https://mpl.example.com): https://mpl.filipus.dev.br
+🌐 Applying CORS (https://mpl.filipus.dev.br) to 'cf-bucket-ccg-2026-0001-mpl-prd-upl'...
+✅ CORS applied (GET, PUT; ETag exposed; max-age 3600).
+
 🔍 Fetching server list from Hetzner...
 Select a server:
 1) ***949:hetzner-vps-1:<IPv4-IP>:running
@@ -434,6 +637,7 @@ Enter number (or 'q' to quit): 1
      access key : **************************** (secret lives only in /etc/litestream.yml, 0600 root)
    Upload bucket: cf-bucket-ccg-2026-0001-mpl-prd-upl (app-facing; see snippet below for its credential)
      token      : iacarus-ccg-2026-0001-mpl-prd-upl-20260715T224500Z
+     CORS origin: https://mpl.filipus.dev.br (GET, PUT; ETag exposed; max-age 3600)
 ------------------------------------------------
    Reminder: if the R2 token has Client IP Address Filtering,
    allowlist hetzner-vps-1 so replication can reach R2.
