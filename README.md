@@ -129,15 +129,15 @@ If you have another "pattern" on your system, setup the SSH_HOME_PATH:
 SSH_HOME_PATH=$HOME/.ssh
 ```
 
-1. If you need to generate a new key pair:
+- If you need to generate a new key pair:
 
-`ssh-keygen -t ed25519 -f ~/.ssh/key-name -C "comment-to-identify-the-key"`
+```sh
+ssh-keygen -t ed25519 -f ~/.ssh/key-name -C "comment-to-identify-the-key"
+# OR
+ssh-keygen -t ed25519 -f <whatever-you-set-on_SSH_HOME_PATH>/key-name -C "comment-to-identify-the-key"
+```
 
-OR
-
-`ssh-keygen -t ed25519 -f <whatever-you-set-on_SSH_HOME_PATH>/key-name -C "comment-to-identify-the-key"`
-
-1. If not, you could use one of your ssh keys.
+- If not, you could use one of your ssh keys.
 
 ```env
 SSH_KEY_PATH=$SSH_HOME_PATH/key-name
