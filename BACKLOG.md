@@ -55,16 +55,18 @@ tool: **`sysstat`** (standard Ubuntu package, tiny footprint) - decided, not ope
 
 **Scope (done)**
 - Added `sysstat` to `packages:` in `hetzner/vps-user_data.yml.template`.
-- Enabled collection in `runcmd` (`/etc/default/sysstat` → `ENABLED="true"` +
-  `systemctl enable --now sysstat`) - done in runcmd, not write_files, because
-  write_files runs before package install and would be clobbered.
-- Dense **2-min** sampler via `/etc/cron.d/iacarus-sysstat` (own file, so the
-  packaged 10-min sampler doesn't matter) - **resolves the interval open Q**:
-  10-min was too coarse for a 5-min window; 2-min gives ~2-3 points at 5m,
-  ~15 at 30m, ~30 at 1h.
+- Enabled collection in `runcmd` (`/etc/default/sysstat` → `ENABLED="true"`,
+  `daemon-reload`, enable the timer, prime one sample) - done in runcmd, not
+  write_files, because write_files runs before package install.
+- Dense **2-min** sampling via a `sysstat-collect.timer.d/iacarus.conf` drop-in
+  (`OnCalendar=*:00/02`) - **resolves the interval open Q**: 10-min was too
+  coarse for a 5-min window; 2-min gives ~2-3 points at 5m, ~15 at 30m, ~30 at
+  1h. NOTE: on Ubuntu 24.04 sampling is driven by the systemd **timer**, not
+  cron - `debian-sa1` self-suppresses under systemd, so a `/etc/cron.d` sampler
+  silently no-ops (the original cron attempt was a bug; fixed in v0.6.1).
 - **Backfill for existing boxes:** `make vps-stats-enable`
-  (`hetzner/vps-stats-enable.sh`) - idempotent install + enable + prime one
-  sample over SSH. Kept separate so `vps-stats` stays strictly read-only.
+  (`hetzner/vps-stats-enable.sh`) - idempotent install + timer override + prime
+  over SSH. Kept separate so `vps-stats` stays strictly read-only.
 
 **Acceptance**
 - Fresh box: `sar` returns history within a few minutes of boot.
@@ -283,8 +285,8 @@ a laptop. Optional - the viewer already runs locally (B1).
 
 ## 📌 Decisions locked (do not relitigate)
 
-- Historical stats collector = **`sysstat`/sar**, sampled every **2 min** via
-  `/etc/cron.d/iacarus-sysstat` (A0, done).
+- Historical stats collector = **`sysstat`/sar**, sampled every **2 min** via a
+  `sysstat-collect.timer` drop-in (A0, done; timer not cron - see A0 note).
 - CORS delivery = **baked into `vps-app-add`**, upl bucket only, origin(s) typed
   fully at the prompt - no shared base domain (A3, done).
 - SPRINT B build = **Hybrid** (Glances for HW, home-grown sh for apps).

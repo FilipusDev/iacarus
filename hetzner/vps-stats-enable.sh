@@ -42,23 +42,28 @@ fi
 # 2. Turn on collection
 sudo sed -i 's/^ENABLED=.*/ENABLED="true"/' /etc/default/sysstat
 
-# 3. Drop the dense (2-min) sampler so short windows have data points
-sudo tee /etc/cron.d/iacarus-sysstat > /dev/null << 'CRON'
-# IaCarus: dense (2-min) sar sampling so `make vps-stats` can show real
-# 5/15/30-min and 1h windows (the packaged sampler is only every 10 min).
-MAILTO=""
-*/2 * * * * root command -v debian-sa1 > /dev/null && debian-sa1 1 1
-CRON
+# 3. Speed up the collector to every 2 min so short windows have data points.
+#    On Ubuntu 24.04 sampling is driven by the sysstat-collect.timer, NOT cron
+#    (debian-sa1 self-suppresses under systemd), so we override the TIMER. The
+#    empty OnCalendar= first clears the packaged 10-min value.
+sudo rm -f /etc/cron.d/iacarus-sysstat   # remove the old, non-working cron file
+sudo mkdir -p /etc/systemd/system/sysstat-collect.timer.d
+sudo tee /etc/systemd/system/sysstat-collect.timer.d/iacarus.conf > /dev/null << 'CONF'
+[Timer]
+OnCalendar=
+OnCalendar=*:00/02
+CONF
 
-# 4. (Re)start the service and prime the first sample immediately
-sudo systemctl enable --now sysstat > /dev/null 2>&1
-sudo debian-sa1 1 1 > /dev/null 2>&1 || true
+# 4. Reload, (re)start the timer, and prime the first sample immediately
+sudo systemctl daemon-reload
+sudo systemctl enable --now sysstat-collect.timer > /dev/null 2>&1
+sudo systemctl start sysstat-collect.service > /dev/null 2>&1 || true
 
-if systemctl is-active --quiet sysstat; then
-    echo -e "${G}✅ sysstat active. Sampling every 2 min.${N}"
-    echo -e "${Y}   Windows fill in over the next hour - run 'make vps-stats' to watch.${N}"
+if systemctl is-active --quiet sysstat-collect.timer; then
+    echo -e "${G}✅ sysstat collecting every 2 min (systemd timer).${N}"
+    echo -e "${Y}   Windows fill in over the next ~10 min - run 'make vps-stats' to watch.${N}"
 else
-    echo -e "${Y}⚠️  sysstat service is not active - check 'systemctl status sysstat'.${N}"
+    echo -e "${Y}⚠️  sysstat-collect.timer is not active - check 'systemctl status sysstat-collect.timer'.${N}"
 fi
 EOF
 
