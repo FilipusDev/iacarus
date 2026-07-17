@@ -74,32 +74,32 @@ tool: **`sysstat`** (standard Ubuntu package, tiny footprint) - decided, not ope
 
 ---
 
-### A1 🔴 `make vps-doctor` - inspect + guided disk cleanup
+### A1 🟢 `make vps-doctor` - inspect + guided disk cleanup
 
 **Why:** "some sort of command where I can inspect the machine, and maybe run
 some cleanups - logs, docker crap, etc… in terms of disk." The box already ships
 `ncdu`, a weekly `docker-prune` cron, and docker log rotation (10m×3); this target
 makes that on-demand and visible.
 
-**Scope** (remote heredoc, styled like `vps-health-check.sh`)
-- **Inspect (read-only first):** `df -h`, biggest dirs (`du` top-N under `/var`,
-  `/var/lib/docker`, `/home`), journald size (`journalctl --disk-usage`), docker
-  reclaimable (`docker system df`), apt cache, old kernels, `/tmp`.
-- **Guided cleanup (explicit, never silent):** offer each with a `y/N` prompt -
-  `docker system prune -f` (and optionally `--volumes` behind an extra guard),
-  `journalctl --vacuum-time=…` / `--vacuum-size=…`, `apt-get clean` +
-  `autoremove`, truncate rotated logs. Show reclaimed bytes after.
-- Mirror the health-check pattern: `select_server_interactive` →
-  `check_ssh_access` → remote `bash -s` heredoc with local color vars.
+**Scope (done)** - `hetzner/vps-doctor.sh`:
+- **Inspect (read-only):** disk usage (`df`), biggest top-level dirs
+  (`du -xhd1 /`, minus the root total), journal size (`journalctl
+  --disk-usage`), docker reclaimable (`docker system df`), apt cache + count of
+  autoremovable packages, installed-kernel count, `/tmp`. One `ssh 'bash -s'`
+  heredoc.
+- **Guided cleanup (opt-in, default No):** `docker system prune -f`,
+  `journalctl --vacuum-time=7d`, `apt-get clean` + `autoremove`, and a
+  double-guarded `docker volume prune` (default OFF - can delete app data).
+- **Pattern:** prompt LOCALLY, act via discrete `ssh -n` calls (a piped
+  `bash -s` heredoc can't read y/N). Prints before/after free space on `/`.
 
-**Acceptance**
-- Runs read-only by default; every destructive action is opt-in per prompt.
-- Prints before/after free space so the win is obvious.
+**Acceptance (met)**
+- Read-only unless you say yes; every destructive action is opt-in per prompt.
+- Prints before/after free space. Verified read-only end-to-end on
+  hetzner-vps-2 (surfaced 1.3 GB reclaimable docker images + 263 MB apt cache).
 
-**Open Qs**
-- Separate target vs. a `--clean` flag on `vps-stats`? (Leaning: separate, so
-  `vps-stats` stays read-only and safe to run anytime.)
-- Guard level for `docker prune --volumes` (can delete data) - default OFF.
+**Decisions (resolved):** separate target (keeps `vps-stats` read-only);
+`docker volume prune` is default-OFF behind two explicit confirmations.
 
 ---
 
@@ -297,7 +297,5 @@ a laptop. Optional - the viewer already runs locally (B1).
 
 ## ❓ Open questions to resolve before coding
 
-1. A1: `vps-doctor` separate target vs. `vps-stats --clean`; guard for
-   `docker prune --volumes`.
-2. B0: app health registry = litestream-label-derived vs. a `mon.d` config file.
-3. B2: glances server bind/auth (localhost+tunnel assumed).
+1. B0: app health registry = litestream-label-derived vs. a `mon.d` config file.
+2. B2: glances server bind/auth (localhost+tunnel assumed).

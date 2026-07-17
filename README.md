@@ -34,6 +34,7 @@ and **SPRINT B** (the TUI monitoring box).
    make vps-new      # Provision a hardened VPS
    make vps-list     # See your fleet
    make vps-stats    # Read-only health snapshot (load + CPU/mem/disk/net windows)
+   make vps-doctor   # Inspect disk usage + guided, opt-in cleanup
    ssh hetzner-vps-1 # Log in (Aliases auto-configured)
    ```
 
