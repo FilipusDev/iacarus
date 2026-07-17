@@ -8,8 +8,15 @@ inspired by the "The One Person Framework" [article](https://world.hey.com/dhh/t
 Please read this `README` from top to bottom. (Yes, really 😅).
 If you prefer debugging for 2 hours to save 5 minutes of reading -> go to [TL;DR](#🦥-tldr).
 
-Currently (`v0.4.0`) it automates the provisioning of hardened **Hetzner VPS**
+Currently (`v0.4.1`) it automates the provisioning of hardened **Hetzner VPS**
 servers, and **Cloudflare R2** storage buckets using simple Bash scripts and Makefiles.
+
+## TODO
+
+Monitoring the server (disk pruning of logs/docker crap) plus near-online
+observability across the fleet is now planned and tracked in
+[`BACKLOG.md`](./BACKLOG.md) - see **SPRINT A** (on-box `vps-stats` / `vps-doctor`)
+and **SPRINT B** (the TUI monitoring box).
 
 ## 🦥 TL;DR
 
@@ -45,7 +52,7 @@ tier - check the [Hetzner console](https://console.hetzner.cloud) for
 updated availability, since server types come and go over time.
 We're talking about a few bucks (USD) cheap. Per VPS!
 
-As of now (`v0.4.0`) you'll need 2 accounts: one for Hetzner and one for Cloudflare.
+As of now (`v0.4.1`) you'll need 2 accounts: one for Hetzner and one for Cloudflare.
 
 At Hetzner, we'll manage server boxes (VPS).
 At Cloudflare, we'll manage Zero Trust tunnels and R2 storage buckets.
@@ -130,7 +137,7 @@ OR
 
 `ssh-keygen -t ed25519 -f <whatever-you-set-on_SSH_HOME_PATH>/key-name -C "comment-to-identify-the-key"`
 
-2. If not, you could use one of your ssh keys.
+1. If not, you could use one of your ssh keys.
 
 ```env
 SSH_KEY_PATH=$SSH_HOME_PATH/key-name
