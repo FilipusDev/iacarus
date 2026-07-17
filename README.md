@@ -11,7 +11,7 @@ If you prefer debugging for 2 hours to save 5 minutes of reading -> go to [TL;DR
 Currently (`v0.4.1`) it automates the provisioning of hardened **Hetzner VPS**
 servers, and **Cloudflare R2** storage buckets using simple Bash scripts and Makefiles.
 
-## TODO
+## 🗺️ TODO
 
 Monitoring the server (disk pruning of logs/docker crap) plus near-online
 observability across the fleet is now planned and tracked in
