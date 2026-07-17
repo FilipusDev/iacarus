@@ -12,6 +12,7 @@ LIST_SCRIPT              := ./vps-list.sh
 HEALTH_SCRIPT            := ./vps-health-check.sh
 STATS_SCRIPT             := ./vps-stats.sh
 STATS_ENABLE_SCRIPT      := ./vps-stats-enable.sh
+DOCTOR_SCRIPT            := ./vps-doctor.sh
 SMOKE_SCRIPT             := ./vps-cf-tunnel-smoke_test.sh
 LITESTREAM_SCRIPT        := ./vps-litestream-add.sh
 LITESTREAM_REMOVE_SCRIPT := ./vps-litestream-remove.sh
@@ -43,6 +44,9 @@ vps-stats: ## Read-only health stats (load + CPU/mem/disk/net windows)
 vps-stats-enable: ## Enable sysstat history on an older box (for vps-stats windows)
 	@$(STATS_ENABLE_SCRIPT)
 
+vps-doctor: ## Inspect disk usage and optionally reclaim space (guided, opt-in)
+	@$(DOCTOR_SCRIPT)
+
 vps-smoke-tunnel: ## Run smoke test setting up a Cloud Flare Tunnel
 	@$(SMOKE_SCRIPT)
 
@@ -61,4 +65,4 @@ vps-app-add: ## Orchestrate a client app: R2 buckets + 2 isolated scoped tokens 
 vps-app-remove: ## Decommission a client app: revoke both tokens + deregister Litestream
 	@$(APP_REMOVE_SCRIPT)
 
-.PHONY: help vps-new vps-down vps-list vps-check-health vps-stats vps-stats-enable vps-smoke-tunnel vps-litestream-add vps-litestream-remove vps-litestream-smoke vps-app-add vps-app-remove
+.PHONY: help vps-new vps-down vps-list vps-check-health vps-stats vps-stats-enable vps-doctor vps-smoke-tunnel vps-litestream-add vps-litestream-remove vps-litestream-smoke vps-app-add vps-app-remove
