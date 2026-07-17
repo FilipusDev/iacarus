@@ -67,12 +67,16 @@ write_files:
       #!/bin/bash
       docker system prune -f
 
-  - path: /etc/cron.d/iacarus-sysstat
+  - path: /etc/systemd/system/sysstat-collect.timer.d/iacarus.conf
     content: |
-      # IaCarus: dense (2-min) sar sampling so `make vps-stats` can show real
-      # 5/15/30-min and 1h windows (the packaged sampler is only every 10 min).
-      MAILTO=""
-      */2 * * * * root command -v debian-sa1 > /dev/null && debian-sa1 1 1
+      # IaCarus: collect every 2 min (the default timer is every 10 min) so
+      # `make vps-stats` can show real 5/15/30-min and 1h windows. On Ubuntu
+      # 24.04 sysstat sampling is driven by THIS systemd timer, not cron -
+      # debian-sa1 self-suppresses when systemd is present - so we override the
+      # timer. The empty OnCalendar= first clears the packaged 10-min value.
+      [Timer]
+      OnCalendar=
+      OnCalendar=*:00/02
 
   - path: /etc/systemd/system/litestream.service
     content: |
@@ -110,7 +114,9 @@ runcmd:
   - systemctl enable fail2ban
   - systemctl restart fail2ban
   - sed -i 's/^ENABLED=.*/ENABLED="true"/' /etc/default/sysstat
-  - systemctl enable --now sysstat
+  - systemctl daemon-reload
+  - systemctl enable --now sysstat-collect.timer
+  - systemctl start sysstat-collect.service
   - ARCH=$(uname -m); if [ "$ARCH" = "x86_64" ]; then LS_ARCH="amd64"; else LS_ARCH="arm64"; fi; curl -L https://github.com/benbjohnson/litestream/releases/download/{{LITESTREAM_VERSION}}/litestream-{{LITESTREAM_VERSION}}-linux-${LS_ARCH}.tar.gz -o /tmp/litestream.tar.gz
   - tar -xzf /tmp/litestream.tar.gz -C /usr/local/bin/
   - rm /tmp/litestream.tar.gz
