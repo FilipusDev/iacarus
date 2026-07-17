@@ -137,7 +137,7 @@ OR
 
 `ssh-keygen -t ed25519 -f <whatever-you-set-on_SSH_HOME_PATH>/key-name -C "comment-to-identify-the-key"`
 
-2. If not, you could use one of your ssh keys.
+1. If not, you could use one of your ssh keys.
 
 ```env
 SSH_KEY_PATH=$SSH_HOME_PATH/key-name
