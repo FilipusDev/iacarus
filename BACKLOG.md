@@ -46,26 +46,29 @@ No web UIs. No time-series database. `ssh mon` (or run local) → nice TUI. Done
 
 ## 🅰️ SPRINT A - box self-service (disk, cleanup, health)
 
-### A0 🔴 Infra: add `sysstat` (sar) to the box image
+### A0 🟢 Infra: add `sysstat` (sar) to the box image
 
 **Why:** `make vps-stats` wants a 1/5/15/**30-min**/**1h** sense of CPU/mem/disk/
 net. Load average natively covers only 1/5/15-min and only for CPU-ish load. Real
 30-min/1h trends for mem/net/disk need a lightweight historical collector. Chosen
 tool: **`sysstat`** (standard Ubuntu package, tiny footprint) - decided, not open.
 
-**Scope**
-- Add `sysstat` to `packages:` in `hetzner/vps-user_data.yml.template`.
-- Enable collection (`/etc/default/sysstat` → `ENABLED="true"`) and tighten the
-  sampling interval if the 10-min default is too coarse for a 30-min window
-  (a `sar` cron every 2-5 min via `/etc/cron.d/sysstat`).
-- **Backfill path for existing boxes:** a small idempotent step (installs +
-  enables sysstat over SSH) so boxes provisioned before this change light up
-  without a rebuild. Candidate: fold into `vps-stats` first-run, or a one-shot
-  `make vps-stats-enable`.
+**Scope (done)**
+- Added `sysstat` to `packages:` in `hetzner/vps-user_data.yml.template`.
+- Enabled collection in `runcmd` (`/etc/default/sysstat` → `ENABLED="true"` +
+  `systemctl enable --now sysstat`) - done in runcmd, not write_files, because
+  write_files runs before package install and would be clobbered.
+- Dense **2-min** sampler via `/etc/cron.d/iacarus-sysstat` (own file, so the
+  packaged 10-min sampler doesn't matter) - **resolves the interval open Q**:
+  10-min was too coarse for a 5-min window; 2-min gives ~2-3 points at 5m,
+  ~15 at 30m, ~30 at 1h.
+- **Backfill for existing boxes:** `make vps-stats-enable`
+  (`hetzner/vps-stats-enable.sh`) - idempotent install + enable + prime one
+  sample over SSH. Kept separate so `vps-stats` stays strictly read-only.
 
 **Acceptance**
-- Fresh box: `sar` returns history within ~1h of boot.
-- Old box: one command makes `vps-stats` fully functional.
+- Fresh box: `sar` returns history within a few minutes of boot.
+- Old box: `make vps-stats-enable` makes `vps-stats` fully functional.
 
 ---
 
@@ -98,28 +101,29 @@ makes that on-demand and visible.
 
 ---
 
-### A2 🔴 `make vps-stats` - health/monitoring snapshot (1/5/15/30m/1h)
+### A2 🟢 `make vps-stats` - health/monitoring snapshot (1/5/15/30m/1h)
 
 **Why:** "a monitoring sense - cpu, mem, disk, net… 1 min, 5 min, 15 min, 30 min,
 1h sense of how healthy the server is." Read-only, safe, run anytime.
 
-**Scope** (remote heredoc)
-- **Load:** `uptime` 1/5/15 + core count context (per-core load).
-- **CPU/mem/net/disk over windows:** parse `sar` (from A0) for 1/5/15/30-min/1h
-  averages - CPU %util, mem used/avail + swap, net rx/tx per iface, disk I/O +
-  `%util`. Fall back gracefully with a clear "run `make vps-stats-enable`" hint if
-  sysstat history isn't there yet.
-- **Now line:** a short live sample (top processes by CPU/mem, current df).
-- Compact, colored, emoji-sectioned output (health-check voice). This is the
-  **local/on-box** counterpart; SPRINT B reuses the same reads for near-online.
+**Scope (done)** - `hetzner/vps-stats.sh`, styled on `vps-health-check.sh`:
+- **Load 1/5/15:** native from `/proc/loadavg`, coloured against core count.
+- **Windows table (now/5m/15m/30m/1h):** CPU busy %, mem used %, disk tps, net
+  rx/tx kB/s. History from `sar -s <start>` Average lines; "now" from a 1-sec
+  live `sar` sample. Column positions pinned to Ubuntu 24.04 sysstat (12.6),
+  extracted by matching the header field name (robust to minor layout drift).
+- **Memory + swap** (`free -h`), **disk space** (`df` with per-mount use-%
+  colouring), **top processes** by CPU and by MEM.
+- Degrades gracefully when sysstat is absent (CPU/disk/net rows show `-` with a
+  "run `make vps-stats-enable`" hint; load/mem/disk/top still render).
 
 **Acceptance**
-- One screen, glanceable, all five windows present when sysstat has data.
-- Zero writes to the box.
+- One screen, glanceable, all windows present when sysstat has data.
+- Zero writes to the box (verified: read-only commands only).
 
-**Reuse note:** factor the remote metric reads into helpers (e.g. in `utils.sh`
-or a shared `hetzner/lib-stats.sh`) so SPRINT B's hardware viewer and the app
-boxes' health endpoint can call the same code. **Don't** duplicate the parsing.
+**Reuse note (for SPRINT B):** the `sar` window parsers live inline in
+`vps-stats.sh` for now. When B2 needs the same reads, factor them into a shared
+`hetzner/lib-stats.sh` rather than duplicating. **Don't** copy-paste the parsing.
 
 ---
 
@@ -279,7 +283,8 @@ a laptop. Optional - the viewer already runs locally (B1).
 
 ## 📌 Decisions locked (do not relitigate)
 
-- Historical stats collector = **`sysstat`/sar** (A0).
+- Historical stats collector = **`sysstat`/sar**, sampled every **2 min** via
+  `/etc/cron.d/iacarus-sysstat` (A0, done).
 - CORS delivery = **baked into `vps-app-add`**, upl bucket only, origin(s) typed
   fully at the prompt - no shared base domain (A3, done).
 - SPRINT B build = **Hybrid** (Glances for HW, home-grown sh for apps).
@@ -290,8 +295,7 @@ a laptop. Optional - the viewer already runs locally (B1).
 
 ## ❓ Open questions to resolve before coding
 
-1. A0: sysstat sampling interval (default 10-min too coarse for a 30-min window?).
-2. A1: `vps-doctor` separate target vs. `vps-stats --clean`; guard for
+1. A1: `vps-doctor` separate target vs. `vps-stats --clean`; guard for
    `docker prune --volumes`.
-3. B0: app health registry = litestream-label-derived vs. a `mon.d` config file.
-4. B2: glances server bind/auth (localhost+tunnel assumed).
+2. B0: app health registry = litestream-label-derived vs. a `mon.d` config file.
+3. B2: glances server bind/auth (localhost+tunnel assumed).
