@@ -226,20 +226,42 @@ change. (Option b, pinning box TZ, was dropped.)
 **Why:** the viewer needs to know which boxes/apps exist. Avoid a hand-kept list
 that drifts.
 
+**Design (decided):** an **in-repo, auto-maintained app registry**. The "vs
+litestream labels" Open Q is resolved in favour of an explicit registry, because
+only an explicit record carries the **health path** (labels don't) and lets the
+app viewer (B4) run from a credential-less laptop with just `curl` (deriving from
+box state would need SSH + Hetzner + CF creds every run). The "hand-kept lists
+drift" fear is answered by **auto-writing** it from the app add/remove scripts -
+it drifts no more than `/etc/litestream.yml`, which those scripts already keep in
+sync the same way.
+
 **Scope**
-- Hardware: derive boxes from `hcloud server list` (already used by
-  `select_server_interactive`) - the mon viewer can reuse it directly when run
-  locally, or read a cached inventory when run from a dedicated mon box that may
-  not hold Hetzner creds.
-- Apps: need URL/health-path per app. Two candidates -
-  (a) reuse the litestream labels already on each box
-  (`litestream_get_bucket`/`_get_access_key` show the pattern) plus a small
-  per-app health-URL registry, or
-  (b) a single `mon.d/*.yml`-ish flat config the viewer reads.
-- **Decision needed** before B4 (see Open Qs).
+- **Hardware:** no storage - derive boxes from `hcloud server list` (already used
+  by `select_server_interactive`) when run locally; read a cached inventory on a
+  dedicated mon box that may not hold Hetzner creds.
+- **Apps:** a single repo file `mon/registry.json` - a JSON array, one object per
+  app: `{ label, box, base_url, health_path, name }`. **JSON + `jq`** (not YAML):
+  `jq` is already a project dependency, and it gives safe, idempotent
+  append/remove without a YAML parser or fragile hand-edits.
+- **Auto-maintenance:** new `utils.sh` helpers `mon_registry_add` /
+  `mon_registry_remove` (mirroring `litestream_register_db` / `_remove_db`),
+  called from `vps-rails-app-add.sh` (after successful provisioning) and
+  `vps-rails-app-remove.sh`. app-add already has `label`, `box` (`$SELECTED_NAME`)
+  and the public origin (`$CORS_ORIGIN`); it additionally prompts for
+  `health_path` (default `/up`, the Rails health endpoint) and `name` (default =
+  label). `base_url` = the canonical origin (first of `$CORS_ORIGIN` if several).
+- **Read path:** a small `mon/` lib fn that emits the app list for B1/B4 to
+  iterate (`jq -r`). Keep it the single source of truth - no other target keeps
+  its own list.
+- **Backfill:** the registry starts empty; already-provisioned apps aren't in it.
+  Provide a one-shot manual `mon-register` (or a documented hand-seed) to add
+  existing apps once - small, since the fleet is tiny today.
 
 **Acceptance**
-- One source of truth for "what to watch"; no duplicate lists across targets.
+- One source of truth (`mon/registry.json`) for "what to watch"; no duplicate
+  lists across targets.
+- `make vps-app-add` appends its app; `make vps-app-remove` drops it; re-running
+  either is idempotent (no dupes, no error on missing).
 
 ---
 
@@ -339,8 +361,14 @@ a laptop. Optional - the viewer already runs locally (B1).
   dedicated-box are the same viewer.
 - Zero-ingress is sacred: all mon traffic rides **SSH tunnels**, never new open
   ports.
+- App registry (B0) = **in-repo `mon/registry.json`**, JSON + `jq`,
+  **auto-maintained** by `vps-app-add`/`vps-app-remove`. Not litestream-derived
+  (labels carry no health path; deriving needs infra creds every run). Explicit
+  record lets the app viewer run from a credential-less laptop with just `curl`.
 
 ## ❓ Open questions to resolve before coding
 
-1. B0: app health registry = litestream-label-derived vs. a `mon.d` config file.
+1. ~~B0: app health registry = litestream-label-derived vs. a `mon.d` config
+   file.~~ **RESOLVED** → in-repo `mon/registry.json`, auto-maintained (see B0 +
+   Decisions locked).
 2. B2: glances server bind/auth (localhost+tunnel assumed).
