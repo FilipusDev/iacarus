@@ -521,7 +521,7 @@ client app **end-to-end in one run**, chaining together the buckets, TWO
 freshly minted, mutually **isolated** bucket-scoped credentials, and the
 Litestream registration.
 
-Given a `PROJECT_CODE` (e.g. `ccg-2026-0001`), an `APP_LABEL` (e.g. `mpl`) and
+Given a `PROJECT_CODE` (e.g. `tcg-2026-01`), an `APP_LABEL` (e.g. `mpl`) and
 an `ENVIRONMENT` (default `prd`), it:
 
 1. Computes the golden-format bucket names and creates **both** in R2
@@ -588,21 +588,21 @@ iacarus/hetzner main ❯ make vps-app-add
 🔍 Checking Pre-requisites...
 
 🧩 Client app identity...
->  Project code (e.g. 'ccg-2026-0001'): ccg-2026-0001
+>  Project code (e.g. 'tcg-2026-01'): tcg-2026-01
 >  App label (e.g. 'mpl'): mpl
 >  Environment [prd]: prd
-   Backup (private): cf-bucket-ccg-2026-0001-mpl-prd-bkp
-   Upload (public):  cf-bucket-ccg-2026-0001-mpl-prd-upl
-🔍 Checking if cf-bucket-ccg-2026-0001-mpl-prd-bkp exists...
-🚰 Creating bucket 'cf-bucket-ccg-2026-0001-mpl-prd-bkp'...
+   Backup (private): cf-bucket-tcg-2026-01-mpl-prd-bkp
+   Upload (public):  cf-bucket-tcg-2026-01-mpl-prd-upl
+🔍 Checking if cf-bucket-tcg-2026-01-mpl-prd-bkp exists...
+🚰 Creating bucket 'cf-bucket-tcg-2026-01-mpl-prd-bkp'...
 ✅ Bucket created successfully!
-🔍 Checking if cf-bucket-ccg-2026-0001-mpl-prd-upl exists...
-🚰 Creating bucket 'cf-bucket-ccg-2026-0001-mpl-prd-upl'...
+🔍 Checking if cf-bucket-tcg-2026-01-mpl-prd-upl exists...
+🚰 Creating bucket 'cf-bucket-tcg-2026-01-mpl-prd-upl'...
 ✅ Bucket created successfully!
 
 🌐 CORS for the upload bucket...
 >  Allowed origin(s), comma-separated (e.g. https://mpl.example.com): https://mpl.filipus.dev.br
-🌐 Applying CORS (https://mpl.filipus.dev.br) to 'cf-bucket-ccg-2026-0001-mpl-prd-upl'...
+🌐 Applying CORS (https://mpl.filipus.dev.br) to 'cf-bucket-tcg-2026-01-mpl-prd-upl'...
 ✅ CORS applied (GET, PUT; ETag exposed; max-age 3600).
 
 🔍 Fetching server list from Hetzner...
@@ -615,33 +615,33 @@ Enter number (or 'q' to quit): 1
 🗄️  Litestream target on hetzner-vps-1...
 >  Full path to the SQLite DB inside its Docker volume (...): /var/lib/docker/volumes/mpl_data/_data/production.sqlite3
 🔍 Checking for an existing entry on hetzner-vps-1...
-🔐 Minting scoped R2 token 'iacarus-ccg-2026-0001-mpl-prd-bkp-20260715T224500Z' (backup bucket only)...
+🔐 Minting scoped R2 token 'iacarus-tcg-2026-01-mpl-prd-bkp-20260715T224500Z' (backup bucket only)...
 ✅ Token minted. Access Key ID: ****************************
-🔐 Minting scoped R2 token 'iacarus-ccg-2026-0001-mpl-prd-upl-20260715T224500Z' (upload bucket only)...
+🔐 Minting scoped R2 token 'iacarus-tcg-2026-01-mpl-prd-upl-20260715T224500Z' (upload bucket only)...
 ✅ Token minted. Access Key ID: ****************************
-📝 Appending 'mpl' (... -> cf-bucket-ccg-2026-0001-mpl-prd-bkp) to /etc/litestream.yml...
+📝 Appending 'mpl' (... -> cf-bucket-tcg-2026-01-mpl-prd-bkp) to /etc/litestream.yml...
 🔄 Restarting litestream...
-✅ 'mpl' registered and replicating to 'cf-bucket-ccg-2026-0001-mpl-prd-bkp'.
+✅ 'mpl' registered and replicating to 'cf-bucket-tcg-2026-01-mpl-prd-bkp'.
 
 ------------------------------------------------
-🎉 APP PROVISIONED: ccg-2026-0001-mpl-prd
+🎉 APP PROVISIONED: tcg-2026-01-mpl-prd
 ------------------------------------------------
-   Project code : ccg-2026-0001
+   Project code : tcg-2026-01
    App label    : mpl
    Environment  : prd
    Server       : hetzner-vps-1
    DB path      : /var/lib/docker/volumes/mpl_data/_data/production.sqlite3
 ------------------------------------------------
-   Backup bucket: cf-bucket-ccg-2026-0001-mpl-prd-bkp (private, Litestream replica)
-     token      : iacarus-ccg-2026-0001-mpl-prd-bkp-20260715T224500Z
+   Backup bucket: cf-bucket-tcg-2026-01-mpl-prd-bkp (private, Litestream replica)
+     token      : iacarus-tcg-2026-01-mpl-prd-bkp-20260715T224500Z
      access key : **************************** (secret lives only in /etc/litestream.yml, 0600 root)
-   Upload bucket: cf-bucket-ccg-2026-0001-mpl-prd-upl (app-facing; see snippet below for its credential)
-     token      : iacarus-ccg-2026-0001-mpl-prd-upl-20260715T224500Z
+   Upload bucket: cf-bucket-tcg-2026-01-mpl-prd-upl (app-facing; see snippet below for its credential)
+     token      : iacarus-tcg-2026-01-mpl-prd-upl-20260715T224500Z
      CORS origin: https://mpl.filipus.dev.br (GET, PUT; ETag exposed; max-age 3600)
 ------------------------------------------------
    Reminder: if the R2 token has Client IP Address Filtering,
    allowlist hetzner-vps-1 so replication can reach R2.
-   Reminder: 'cf-bucket-ccg-2026-0001-mpl-prd-upl' is PRIVATE by default - if you need it
+   Reminder: 'cf-bucket-tcg-2026-01-mpl-prd-upl' is PRIVATE by default - if you need it
    reachable over the open internet, enable Public Access / bind a Custom
    Domain for it manually in the R2 dashboard (this is a one-time,
    per-app step this tool intentionally does not automate).
@@ -654,13 +654,13 @@ Enter number (or 'q' to quit): 1
 # 1. Add these to your Rails encrypted credentials (e.g. EDITOR=vim bin/rails
 #    credentials:edit --environment=prd):
 r2:
-  public_bucket: "cf-bucket-ccg-2026-0001-mpl-prd-upl"
+  public_bucket: "cf-bucket-tcg-2026-01-mpl-prd-upl"
   access_key_id: "****************************"
   secret_access_key: "****************************************************************"
   endpoint: "https://<account-id>.r2.cloudflarestorage.com"
 #
 # 2. Reference them inside config/storage.yml using your standard patterns.
-# This credential can ONLY reach 'cf-bucket-ccg-2026-0001-mpl-prd-upl' - it has no access to the
+# This credential can ONLY reach 'cf-bucket-tcg-2026-01-mpl-prd-upl' - it has no access to the
 # backup bucket, even if this app is compromised.
 =============================================================================
 ```
@@ -708,14 +708,14 @@ Enter number (or 'q' to quit): 1
 🔍 Checking for 'mpl' on hetzner-vps-1...
 🔎 Recovering the scoped token id from /etc/litestream.yml...
    Backup token id (Access Key ID): ****************************
-   Upload-bucket token(s) to revoke: iacarus-ccg-2026-0001-mpl-prd-upl-* (bucket 'cf-bucket-ccg-2026-0001-mpl-prd-upl' is NOT deleted)
+   Upload-bucket token(s) to revoke: iacarus-tcg-2026-01-mpl-prd-upl-* (bucket 'cf-bucket-tcg-2026-01-mpl-prd-upl' is NOT deleted)
 ⚠️  This revokes BOTH the backup and upload R2 credentials and stops backups for 'mpl'.
     R2 buckets and existing objects are NOT deleted.
 >  Type 'mpl' to confirm: mpl
 🔐 Revoking backup-bucket R2 token '****************************' in Cloudflare...
 ✅ Backup token revoked.
-🔐 Revoking upload-bucket R2 token(s) matching 'iacarus-ccg-2026-0001-mpl-prd-upl-*' in Cloudflare...
-   ✅ revoked iacarus-ccg-2026-0001-mpl-prd-upl-20260715T224500Z (****************************)
+🔐 Revoking upload-bucket R2 token(s) matching 'iacarus-tcg-2026-01-mpl-prd-upl-*' in Cloudflare...
+   ✅ revoked iacarus-tcg-2026-01-mpl-prd-upl-20260715T224500Z (****************************)
 ✅ Upload token(s) revoked (or were already gone).
 📝 Removing 'mpl' from /etc/litestream.yml...
 🔄 Restarting litestream...
