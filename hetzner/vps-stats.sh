@@ -39,14 +39,35 @@ command -v sar > /dev/null 2>&1 && HAS_SAR=1
 
 # --- helpers -----------------------------------------------------------------
 
-# Average of a named sar field over the last N minutes (today's data file).
-# Finds the field's column from the header row, then reads the Average: row.
+# Emit sar text for a window, spanning YESTERDAY's day-file when the lookback
+# crosses local midnight. `sar -s` only filters within a single day's file, so
+# right after midnight a 1h (or wider) lookback lands on a start time that
+# doesn't exist in today's file -> no rows. When the window wraps, we read
+# yesterday's tail (from $start) then today's head (00:00 -> now) and let the
+# callers' awk average across both. Missing/rotated yesterday file -> that sar
+# call errors to /dev/null and we degrade to today-only, never failing.
+sar_span() {  # $1=sar flags  $2=start HH:MM:SS  $3=lookback day-of-month  $4=today day-of-month
+    if [ "$3" != "$4" ]; then
+        LC_ALL=C sar $1 -f /var/log/sysstat/sa"$3" -s "$2" 2>/dev/null
+        LC_ALL=C sar $1 2>/dev/null
+    else
+        LC_ALL=C sar $1 -s "$2" 2>/dev/null
+    fi
+}
+
+# Average of a named sar field over the last N minutes. Finds the field's column
+# from the header row, then count-weights the numeric data rows across whatever
+# sar_span emits (one or two day-files) - we compute our own mean instead of
+# trusting a single Average: line, which can't span the midnight boundary.
 sar_avg() {  # $1=minutes  $2=sar flags  $3=field header (e.g. %memused)
     [ "$HAS_SAR" -eq 1 ] || return 0
-    local start; start=$(date -d "$1 minutes ago" +%H:%M:%S)
-    LC_ALL=C sar $2 -s "$start" 2>/dev/null | awk -v want="$3" '
-        idx==0 { for (i=1;i<=NF;i++) if ($i==want) idx=i }
-        /^Average:/ && idx>0 { print $idx; exit }'
+    local start today ago
+    start=$(date -d "$1 minutes ago" +%H:%M:%S)
+    today=$(date +%d); ago=$(date -d "$1 minutes ago" +%d)
+    sar_span "$2" "$start" "$ago" "$today" | awk -v want="$3" '
+        idx==0 { for (i=1;i<=NF;i++) if ($i==want) idx=i; next }
+        idx>0 && $1 ~ /^[0-9:]+$/ && $idx ~ /^[0-9]+(\.[0-9]+)?$/ { s+=$idx; n++ }
+        END { if (n>0) printf "%.2f", s/n }'
 }
 
 # CPU busy% = 100 - %idle, over the last N minutes.
@@ -57,12 +78,16 @@ mem_win() { sar_avg "$1" "-r" "%memused" | awk '{printf "%.0f",$1}'; }
 tps_win() { sar_avg "$1" "-b" "tps" | awk '{printf "%.0f",$1}'; }
 
 # Per-iface network average (rxkB/s or txkB/s) over the last N minutes.
+# Same count-weighted, midnight-spanning approach as sar_avg, filtered to $ifc.
 net_win() {  # $1=minutes  $2=iface  $3=field (rxkB/s|txkB/s)
     [ "$HAS_SAR" -eq 1 ] || return 0
-    local start; start=$(date -d "$1 minutes ago" +%H:%M:%S)
-    LC_ALL=C sar -n DEV -s "$start" 2>/dev/null | awk -v want="$3" -v ifc="$2" '
-        idx==0 { for (i=1;i<=NF;i++){ if ($i==want) idx=i; if ($i=="IFACE") ifx=i } }
-        /^Average:/ && idx>0 && $ifx==ifc { printf "%.1f",$idx; exit }'
+    local start today ago
+    start=$(date -d "$1 minutes ago" +%H:%M:%S)
+    today=$(date +%d); ago=$(date -d "$1 minutes ago" +%d)
+    sar_span "-n DEV" "$start" "$ago" "$today" | awk -v want="$3" -v ifc="$2" '
+        idx==0 { for (i=1;i<=NF;i++){ if ($i==want) idx=i; if ($i=="IFACE") ifx=i }; next }
+        idx>0 && $1 ~ /^[0-9:]+$/ && $ifx==ifc && $idx ~ /^[0-9]+(\.[0-9]+)?$/ { s+=$idx; n++ }
+        END { if (n>0) printf "%.1f", s/n }'
 }
 
 # "now" via a 1-second live sample - works even with no history.
@@ -96,7 +121,7 @@ printf "   %-14s %s %s %s %s %s\n" "mem used %"  "$(cell "$(free | awk '/^Mem:/{
 printf "   %-14s %s %s %s %s %s\n" "disk tps"    "$(cell "$(tps_now)")" "$(cell "$(tps_win 5)")" "$(cell "$(tps_win 15)")" "$(cell "$(tps_win 30)")" "$(cell "$(tps_win 60)")"
 printf "   %-14s %s %s %s %s %s\n" "net rx kB/s" "$(cell "$(net_now "$IFACE" rxkB/s)")" "$(cell "$(net_win 5 "$IFACE" rxkB/s)")" "$(cell "$(net_win 15 "$IFACE" rxkB/s)")" "$(cell "$(net_win 30 "$IFACE" rxkB/s)")" "$(cell "$(net_win 60 "$IFACE" rxkB/s)")"
 printf "   %-14s %s %s %s %s %s\n" "net tx kB/s" "$(cell "$(net_now "$IFACE" txkB/s)")" "$(cell "$(net_win 5 "$IFACE" txkB/s)")" "$(cell "$(net_win 15 "$IFACE" txkB/s)")" "$(cell "$(net_win 30 "$IFACE" txkB/s)")" "$(cell "$(net_win 60 "$IFACE" txkB/s)")"
-echo -e "   ${B}(net iface: ${IFACE}; windows are today's samples)${N}"
+echo -e "   ${B}(net iface: ${IFACE}; windows are rolling sar samples)${N}"
 
 if [ "$HAS_SAR" -eq 0 ]; then
     echo ""

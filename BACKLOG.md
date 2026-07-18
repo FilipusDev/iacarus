@@ -171,6 +171,51 @@ origin(s) every time. The `CF_APP_BASE_DOMAIN` idea was dropped.
 
 ---
 
+### A4 🟢 `vps-stats` - fix the post-midnight `1h` (and wider) window gap
+
+**Why:** the window columns silently showed `-` for roughly the first hour after
+the **box's local midnight** (observed ~21:50 BRT = ~00:50 UTC on a UTC box: the
+`1h` cell blanked, then filled once the clock passed 01:00 UTC). Root cause was
+in `sar_avg()` (`hetzner/vps-stats.sh`): it ran `sar $flags -s "$start"` with no
+`-f`, so sar only ever read **today's** day-file (`/var/log/sysstat/sa$(date
++%d)`). When `N minutes ago` crosses local midnight, `$start` (e.g. `23:50:00`)
+is later than every timestamp in the post-midnight file → zero rows → empty →
+`cell()` printed `-`. Same failure for the 30m/15m/5m cells in the minutes right
+after midnight. A day-file-scope limitation of `sar -s`, not bad data.
+
+**Priority note:** fixed **before** the A2 reuse note (lines ~126-128) pulls
+these parsers into a shared `hetzner/lib-stats.sh` for B2 - so no SPRINT B
+consumer inherits the bug. Landed in `vps-stats.sh` while it still lives in one
+place.
+
+**Scope (done)** - `hetzner/vps-stats.sh`:
+- New `sar_span()` helper spans the midnight boundary: when `date -d "$1 minutes
+  ago" +%d` differs from `date +%d`, it reads **yesterday's** day-file (`-f
+  /var/log/sysstat/sa<DD> -s "$start"`) for the pre-midnight tail, then today's
+  file for the post-midnight head; otherwise the plain single-file `-s` path.
+- `sar_avg()` and `net_win()` now **compute their own count-weighted mean** over
+  the numeric data rows (target column matched by header name, per A2's
+  drift-robustness) instead of trusting sar's single `Average:` line - which
+  structurally can't span two files. A `$1 ~ /^[0-9:]+$/` row guard excludes the
+  `Average:`/`RESTART` lines (without it, `net_win` double-counts `Average:`).
+- Stays **read-only** (zero writes). Missing/rotated yesterday file → the extra
+  sar call errors to `/dev/null` and it degrades to today-only, never failing.
+
+**Acceptance**
+- Parsing verified with two-file (crossed-midnight) fixtures: count-weighted mean
+  correct across the boundary; same-day path unchanged (no regression); `net_win`
+  no longer double-counts the `Average:` row. `bash -n` clean.
+- **Live-verify pending:** the true end-to-end proof (real box, `1h` cell
+  populated) can only be observed in the ~21:00-22:00 BRT window after UTC
+  midnight - do a `make vps-stats` run there to close it out.
+
+**Decision (resolved):** box timezone stays **unmanaged/UTC** (option a) - the
+wrap fix is correct regardless of TZ, and the SPRINT B viewer reads each box's
+own clock anyway, so per-box TZ isn't assumed uniform. No `vps-user_data.yml`
+change. (Option b, pinning box TZ, was dropped.)
+
+---
+
 ## 🅱️ SPRINT B - monitoring / observability box
 
 > Read the **North Star** above first. Viewer is stateless + portable; data lives
