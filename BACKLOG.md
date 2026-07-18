@@ -350,6 +350,50 @@ a laptop. Optional - the viewer already runs locally (B1).
 
 ---
 
+## 🧊 Parked - SPRINT C / D sketches (NOT ratified)
+
+> Captured so they stop floating around. **Nothing here is a decision.** These
+> are dreams-out-loud plus a third-party prompt sketch, kept only so SPRINT B
+> can be built without forgetting where it might lead. Do not treat any of it as
+> designed, scoped, or agreed. Re-open properly once B0-B4 are green.
+
+**Origin (verbatim intent):** *"maybe a SPRINT C, where I could have alerts?
+maybe reports of the monitoring? and maybe a D SPRINT with a nice 'status' page
+for all my boxes' apps."*
+
+### C? Alerting + light reports
+
+- A cron-driven check loop over the B0 registry: non-200 or latency over a
+  threshold dispatches a message out (Telegram bot / webhook / email).
+- A daily digest ("pulse") summarising 24h of availability into one message.
+
+### D? Public status page
+
+- A cron/CI loop compiles a **static** `status.html` (vanilla HTML/CSS, our
+  design tokens) and ships it to a public R2 bucket behind a custom domain.
+  Zero compute, cached at the edge, nothing to keep alive.
+
+### ⚠️ Unresolved before either can be scoped
+
+- **Alert state.** A truly stateless loop re-alerts every run for the whole
+  outage. Dedup/hysteresis needs *somewhere* to remember "already told you".
+  Where does that live, and what suppresses flapping? This is the actual design
+  question in C, not a detail.
+- **Who runs the loop.** C's cron and D's generator both need an always-on
+  host. On a laptop, the status page freezes green at lid-close while a box
+  burns. This makes **B3 (mon box) a prerequisite for C/D, not "optional"** -
+  contradicting B3's current framing. Resolve before scoping either.
+- **Freshness vs. edge cache.** "Un-killable + cached" and "reflects reality"
+  pull against each other; someone owns the R2 cache TTL and the staleness
+  window that comes with it.
+- **No mail pipeline exists.** There is no SES/SMTP path anywhere in this repo
+  today. Any email-based C story is building that from zero first.
+- **Prompt-mode caveat.** A piped `bash -s` heredoc cannot read `y/N` (A1's
+  lesson). Any C script wanting confirmation uses the vps-doctor pattern:
+  prompt locally, act via discrete `ssh -n`.
+
+---
+
 ## 📌 Decisions locked (do not relitigate)
 
 - Historical stats collector = **`sysstat`/sar**, sampled every **2 min** via a
