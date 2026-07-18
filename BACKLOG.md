@@ -240,7 +240,15 @@ sync the same way.
   by `select_server_interactive`) when run locally; read a cached inventory on a
   dedicated mon box that may not hold Hetzner creds.
 - **Apps:** a single repo file `mon/registry.json` - a JSON array, one object per
-  app: `{ label, box, base_url, health_path, name }`. **JSON + `jq`** (not YAML):
+  app: `{ app_slug, box, label, base_url, health_path, name }`, **keyed on
+  `app_slug`** (`${PROJECT_CODE}-${APP_LABEL}-${ENVIRONMENT}`, see
+  `vps-rails-app-add.sh`). `label` alone is **not** a valid key: uniqueness is
+  only ever enforced per-box (app-add greps that one box's
+  `/etc/litestream.yml`), so the same label may legally exist on two boxes and
+  would collide fleet-wide. `app_slug` is already fleet-unique - it is what the
+  R2 buckets and scoped tokens are named after. `box` + `label` are retained as
+  fields (removal resolves by them, see below); `project_code` / `environment`
+  stay derivable from the slug. **JSON + `jq`** (not YAML):
   `jq` is already a project dependency, and it gives safe, idempotent
   append/remove without a YAML parser or fragile hand-edits.
 - **Auto-maintenance:** new `utils.sh` helpers `mon_registry_add` /
@@ -250,9 +258,23 @@ sync the same way.
   and the public origin (`$CORS_ORIGIN`); it additionally prompts for
   `health_path` (default `/up`, the Rails health endpoint) and `name` (default =
   label). `base_url` = the canonical origin (first of `$CORS_ORIGIN` if several).
+- **Removal lookup (important):** `vps-rails-app-remove.sh` only ever prompts for
+  **box + label** - it derives `APP_SLUG` from the litestream bucket read at
+  lines ~79-81, *inside* the `if BKP_BUCKET readable` branch, which is allowed to
+  fail non-fatally. So `mon_registry_remove` must **not** depend on that read.
+  It resolves the slug **locally out of the registry** by `(box, label)`
+  (`jq --arg b --arg l 'map(select(.box==$b and .label==$l))'`) and deletes by the
+  `app_slug` it finds. No SSH, no orphaned entry when litestream is unreadable.
+  A miss (app predates the registry, backfill not run) warns and continues -
+  same non-fatal posture as the existing token-revocation warning.
 - **Read path:** a small `mon/` lib fn that emits the app list for B1/B4 to
   iterate (`jq -r`). Keep it the single source of truth - no other target keeps
   its own list.
+- **Privacy:** `mon/registry.json` holds client base URLs and this repo is public
+  (`gh` → `github.com/FilipusDev/iacarus`). It is therefore **gitignored**, with a
+  committed `mon/registry.example.json` carrying fake entries - mirroring the
+  existing `.env` / `.env.example` split. The registry is local operator state,
+  not source.
 - **Backfill:** the registry starts empty; already-provisioned apps aren't in it.
   Provide a one-shot manual `mon-register` (or a documented hand-seed) to add
   existing apps once - small, since the fleet is tiny today.
@@ -262,6 +284,11 @@ sync the same way.
   lists across targets.
 - `make vps-app-add` appends its app; `make vps-app-remove` drops it; re-running
   either is idempotent (no dupes, no error on missing).
+- Two apps sharing a `label` on **different boxes** coexist without collision,
+  and removing one leaves the other intact.
+- `vps-app-remove` still deregisters cleanly when the litestream bucket read
+  fails (no orphaned registry entry).
+- The live registry is never committed; `mon/registry.example.json` is.
 
 ---
 
@@ -405,10 +432,15 @@ for all my boxes' apps."*
   dedicated-box are the same viewer.
 - Zero-ingress is sacred: all mon traffic rides **SSH tunnels**, never new open
   ports.
-- App registry (B0) = **in-repo `mon/registry.json`**, JSON + `jq`,
-  **auto-maintained** by `vps-app-add`/`vps-app-remove`. Not litestream-derived
-  (labels carry no health path; deriving needs infra creds every run). Explicit
-  record lets the app viewer run from a credential-less laptop with just `curl`.
+- App registry (B0) = **`mon/registry.json`**, JSON + `jq`, **auto-maintained**
+  by `vps-app-add`/`vps-app-remove`. Not litestream-derived (labels carry no
+  health path; deriving needs infra creds every run). Explicit record lets the
+  app viewer run from a credential-less laptop with just `curl`.
+- Registry key (B0) = **`app_slug`**, not `label` - label is only unique per box
+  and collides fleet-wide. Removal resolves the slug locally by `(box, label)`
+  via `jq`, never via the litestream bucket read (which may fail).
+- Registry file (B0) = **gitignored**, shipped as `mon/registry.example.json`.
+  Public repo; the live file holds client base URLs. Operator state, not source.
 
 ## ❓ Open questions to resolve before coding
 
