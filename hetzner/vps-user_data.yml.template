@@ -17,6 +17,7 @@ swap:
 
 packages:
   - docker.io
+  - docker-buildx
   - git
   - ufw
   - fail2ban
