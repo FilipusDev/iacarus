@@ -118,7 +118,7 @@ and fails with a confusing "No such file or directory".
 cd iacarus            # repo root, so config.sh finds .env
 source config.sh      # loads CF_R2_S3_CLIENT_URL + exports the account R2 key
 
-export PROJECT_CODE=ccg-2026-01   # real project code
+export PROJECT_CODE=tcg-2026-01   # real project code
 export APP_LABEL=mpl              # real app label
 export ENVIRONMENT=prd            # real environment
 ```

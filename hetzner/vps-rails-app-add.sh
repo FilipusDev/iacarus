@@ -28,7 +28,7 @@ echo -e "\n${C_INFO}🧩 Client app identity...${C_RESET}"
 
 PROJECT_CODE=$1
 if [ -z "$PROJECT_CODE" ]; then
-    echo -n ">  Project code (e.g. 'ccg-2026-0001'): "
+    echo -n ">  Project code (e.g. 'tcg-2026-01'): "
     read PROJECT_CODE
 fi
 if [ -z "$PROJECT_CODE" ]; then
