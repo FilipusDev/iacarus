@@ -40,6 +40,27 @@ source "$ENV_FILE"
 # it can be exercised against a fixture) without editing anything.
 MON_REGISTRY="${MON_REGISTRY:-${PROJECT_ROOT}/mon/registry.json}"
 
+# App board (B4) thresholds, judged on TOTAL round-trip in milliseconds: under
+# WARN is green, between WARN and CRIT is yellow, at/over CRIT (or any non-200)
+# is red.
+#
+# These measure the trip from WHEREVER THE VIEWER RUNS to the app - so they are
+# a property of the observer, not of the app. Measured baseline from Brazil to a
+# Helsinki box behind a Cloudflare tunnel: ~250ms steady, with reconnect
+# outliers near 580ms, while the app itself answers /up in 3-6ms on the box. The
+# defaults below sit above that noise. A mon box in Europe would see ~10ms and
+# should run far tighter numbers - override in .env rather than assuming these
+# travel.
+MON_LATENCY_WARN_MS="${MON_LATENCY_WARN_MS:-1200}"
+MON_LATENCY_CRIT_MS="${MON_LATENCY_CRIT_MS:-3000}"
+
+# Seconds between redraws of the live board, and the per-request timeout.
+MON_REFRESH_SECONDS="${MON_REFRESH_SECONDS:-10}"
+MON_HTTP_TIMEOUT="${MON_HTTP_TIMEOUT:-15}"
+
+# Warn when a TLS certificate expires within this many days.
+MON_TLS_WARN_DAYS="${MON_TLS_WARN_DAYS:-21}"
+
 # --- SSH KEY CONFIG ---
 
 SSH_PUBLIC_KEY_PATH=${SSH_PUBLIC_KEY_PATH}
