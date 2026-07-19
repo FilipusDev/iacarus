@@ -237,7 +237,14 @@ sleep 1
 # perfectly normal exit.
 GLANCES_ERR="${WORK_DIR}/glances.stderr"
 GLANCES_RC=0
-glances --browser --config "$GLANCES_CONF" 2> "$GLANCES_ERR" || GLANCES_RC=$?
+# --disable-plugin connections: glances 3.4.0.3's connections plugin crashes the
+# whole curses render on drill-in with 'KeyError: LISTEN'. Its msg_curse reads
+# self.stats['LISTEN'] guarded only by a net_connections_enabled flag, but the
+# glances SERVER sets that flag true while leaving the per-state counts empty
+# whenever it can't enumerate sockets (loopback server, unprivileged user) - so
+# ENTER on a box blanks the board and strands the cursor. The hardware board
+# doesn't show TCP-connection counts anyway; dropping the plugin is a clean fix.
+glances --browser --disable-plugin connections --config "$GLANCES_CONF" 2> "$GLANCES_ERR" || GLANCES_RC=$?
 
 # glances 3.4.0.3 ALWAYS fails its own teardown. serve_forever() ends with
 # 'finally: self.end()', which calls curses.endwin() on a session curses has
