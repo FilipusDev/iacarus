@@ -1,3 +1,5 @@
 .env
 vps-user_data.yml
 *context*
+mon/registry.json
+mon/registry.json.*

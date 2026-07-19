@@ -127,3 +127,15 @@ else
     echo -e "${C_ERROR}❌ litestream failed to (re)start. Check 'journalctl -u litestream' on $SELECTED_NAME.${C_RESET}"
     exit 1
 fi
+
+# 10. Drop the app from the mon registry (SPRINT B0). Resolved locally by
+#     box + label - never from $BKP_BUCKET, whose read above is allowed to fail
+#     non-fatally and would otherwise leave a stale row behind. A miss is
+#     expected for apps provisioned before the registry existed, so it warns
+#     instead of aborting: the real decommission already succeeded.
+echo -e "${C_INFO}📡 Removing '$APP_LABEL' from the mon registry...${C_RESET}"
+if REMOVED_SLUG=$(mon_registry_remove "$SELECTED_NAME" "$APP_LABEL"); then
+    echo -e "${C_SUCCESS}✅ '$REMOVED_SLUG' will no longer be monitored.${C_RESET}"
+else
+    echo -e "${C_WARN}⚠️  No registry entry for '$APP_LABEL' on $SELECTED_NAME - nothing to unmonitor.${C_RESET}"
+fi

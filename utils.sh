@@ -135,6 +135,90 @@ function litestream_remove_db() {
     ssh -q "$HOST" "systemctl is-active --quiet litestream"
 }
 
+# --- FUNCTIONS MON (APP REGISTRY) ---
+
+# Function: Upsert an app into $MON_REGISTRY (SPRINT B0). Keyed on <APP_SLUG>,
+# which is fleet-unique (it is what the R2 buckets and scoped tokens are named
+# after) - unlike <LABEL>, whose uniqueness is only ever enforced per-box.
+# Idempotent by construction: any row with the same slug is filtered out before
+# the new one is appended, so re-running an add updates in place instead of
+# duplicating. Written via a sibling temp file + atomic rename, because jq
+# cannot read and write the same file in one pass (it would truncate it).
+# Creates the file (and mon/) on first use. Returns 0 on success.
+function mon_registry_add() {
+    local APP_SLUG=$1
+    local BOX=$2
+    local LABEL=$3
+    local BASE_URL=$4
+    local HEALTH_PATH=$5
+    local NAME=$6
+
+    mkdir -p "$(dirname "$MON_REGISTRY")"
+    [ -f "$MON_REGISTRY" ] || echo '[]' > "$MON_REGISTRY"
+
+    local TMP
+    TMP=$(mktemp "${MON_REGISTRY}.XXXXXX")
+
+    jq --arg slug "$APP_SLUG" \
+       --arg box "$BOX" \
+       --arg label "$LABEL" \
+       --arg base_url "$BASE_URL" \
+       --arg health_path "$HEALTH_PATH" \
+       --arg name "$NAME" \
+       'map(select(.app_slug != $slug))
+        + [{
+            app_slug:    $slug,
+            box:         $box,
+            label:       $label,
+            base_url:    $base_url,
+            health_path: $health_path,
+            name:        $name
+          }]
+        | sort_by(.app_slug)' "$MON_REGISTRY" > "$TMP" \
+        && mv "$TMP" "$MON_REGISTRY"
+}
+
+# Function: Drop an app from $MON_REGISTRY, resolving it by <BOX> + <LABEL> -
+# the only pair vps-rails-app-remove.sh reliably holds. It derives APP_SLUG from
+# a litestream bucket read that is explicitly allowed to fail non-fatally, so
+# depending on that read here would orphan the registry row in exactly the
+# degraded case where cleanup matters most. The lookup is therefore purely
+# local (jq, no SSH). Prints the slug it removed.
+# Returns 1 on a miss (unknown app, or one that predates the registry) so the
+# caller can warn and continue rather than abort.
+# CALL IT IN A CONDITION - `if SLUG=$(mon_registry_remove "$BOX" "$LABEL"); then`.
+# A bare call trips the global ERR trap on the miss path and prints the "Script
+# aborted!" panic block for what is a perfectly normal outcome.
+function mon_registry_remove() {
+    local BOX=$1
+    local LABEL=$2
+
+    [ -f "$MON_REGISTRY" ] || return 1
+
+    local SLUG
+    SLUG=$(jq -r --arg box "$BOX" --arg label "$LABEL" \
+        'map(select(.box == $box and .label == $label)) | .[0].app_slug // empty' \
+        "$MON_REGISTRY")
+
+    [ -z "$SLUG" ] && return 1
+
+    local TMP
+    TMP=$(mktemp "${MON_REGISTRY}.XXXXXX")
+
+    jq --arg slug "$SLUG" 'map(select(.app_slug != $slug))' "$MON_REGISTRY" > "$TMP" \
+        && mv "$TMP" "$MON_REGISTRY" \
+        && echo "$SLUG"
+}
+
+# Function: Emit the registry as one compact JSON object per line - the read
+# path B1/B4 iterate over. Absent/empty registry emits nothing (exit 0), so a
+# fresh clone or a credential-less laptop degrades to "no apps", never an error.
+function mon_registry_list() {
+    [ -f "$MON_REGISTRY" ] || return 0
+
+    jq -c '.[]' "$MON_REGISTRY"
+}
+
 # Function: Read the access-key-id (which, for tokens minted by this tool, IS
 # the Cloudflare token id) out of a labeled entry in a remote host's
 # /etc/litestream.yml. Matches the "  # <label>" block through to the next
