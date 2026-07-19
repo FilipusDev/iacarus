@@ -8,6 +8,7 @@ include config.mk
 #   make setup       Local wizard + dependency check.
 #   make hetzner     Hetzner VPS control plane (provision, health, Litestream).
 #   make cloudflare  Cloudflare R2 control plane (bucket lifecycle).
+#   make mon         Stateless observability viewer (fleet + app monitoring).
 #
 # MULTI-TENANT APP ORCHESTRATOR (under `make hetzner`)
 #   The high-level orchestrator provisions a whole client app in one shot -
@@ -36,4 +37,7 @@ hetzner: ## Enter Hetzner Control Plane
 cloudflare: ## Enter Cloudflare Control Plane
 	@$(MAKE) -C cloudflare help
 
-.PHONY: help setup hetzner cloudflare
+mon: ## Enter Mon (Observability) Control Plane
+	@$(MAKE) -C mon help
+
+.PHONY: help setup hetzner cloudflare mon

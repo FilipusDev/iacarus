@@ -210,6 +210,24 @@ function mon_registry_remove() {
         && echo "$SLUG"
 }
 
+# Function: Report where the viewer is running (SPRINT B1). The viewer is
+# stateless and portable - the SAME code runs from a laptop or a dedicated mon
+# box - so this is never a code fork, only a runtime capability question:
+#   operator = hcloud answers, so the Hetzner fleet can be enumerated live
+#              (provisioning creds present; typically the laptop)
+#   viewer   = no usable hcloud, so the registry + ssh config are all we have
+#              (a credential-less mon box, or a laptop with creds unloaded)
+# Both contexts render apps identically - B4 only needs curl + the registry.
+# The difference is whether hardware targets can be discovered or must be read
+# from what the registry already records.
+function mon_context() {
+    if command -v hcloud > /dev/null 2>&1 && hcloud server list -o noheader > /dev/null 2>&1; then
+        echo "operator"
+    else
+        echo "viewer"
+    fi
+}
+
 # Function: Emit the registry as one compact JSON object per line - the read
 # path B1/B4 iterate over. Absent/empty registry emits nothing (exit 0), so a
 # fresh clone or a credential-less laptop degrades to "no apps", never an error.
