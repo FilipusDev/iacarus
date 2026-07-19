@@ -15,6 +15,7 @@ SHELL := /bin/bash
 CHECK_SCRIPT    := ./mon-check.sh
 LIST_SCRIPT     := ./mon-list.sh
 REGISTER_SCRIPT := ./mon-register.sh
+APPS_SCRIPT     := ./mon-apps.sh
 
 help: ## Show this help message
 	@echo -e "\n$(C_HIGH)| 📡 MON | 🦅 IaCarus ${VERSION} - CONTROL PLANE$(C_RESET)"
@@ -31,4 +32,10 @@ mon-list: ## List the registered apps (offline - no network, no credentials)
 mon-register: ## Hand-register an existing app (backfill; derives what it can)
 	@$(REGISTER_SCRIPT)
 
-.PHONY: help mon-check mon-list mon-register
+mon-apps: ## Live app liveness + latency board (Ctrl-C to stop)
+	@$(APPS_SCRIPT)
+
+mon-apps-once: ## One pass over the apps, then exit (non-zero if anything is down)
+	@$(APPS_SCRIPT) --once
+
+.PHONY: help mon-check mon-list mon-register mon-apps mon-apps-once
