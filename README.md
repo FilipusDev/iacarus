@@ -283,6 +283,7 @@ help                 Show this help message
 setup                Run the setup script
 hetzner              Enter Hetzner Control Plane
 cloudflare           Enter Cloudflare Control Plane
+mon                  Enter Mon (Observability) Control Plane
 ```
 
 Run `make setup`.
