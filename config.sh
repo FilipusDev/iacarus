@@ -73,6 +73,13 @@ MON_GLANCES_LOCAL_PORT_BASE="${MON_GLANCES_LOCAL_PORT_BASE:-61209}"
 # How long to wait for each SSH tunnel to start accepting connections.
 MON_TUNNEL_TIMEOUT="${MON_TUNNEL_TIMEOUT:-15}"
 
+# Name prefix for MON boxes (B3), kept distinct from VPS_BASE_NAME so the two
+# profiles number independently and a mon box is identifiable at a glance in
+# 'hcloud server list'. Where the viewer lives on that box - the repo is copied
+# there by 'make vps-mon-setup', which also generates the box's own ssh key.
+MON_VPS_BASE_NAME="${MON_VPS_BASE_NAME:-hetzner-mon-}"
+MON_REMOTE_PATH="${MON_REMOTE_PATH:-/opt/iacarus}"
+
 # --- SSH KEY CONFIG ---
 
 SSH_PUBLIC_KEY_PATH=${SSH_PUBLIC_KEY_PATH}

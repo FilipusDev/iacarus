@@ -5,6 +5,55 @@ set -e
 source ../config.sh
 source ../utils.sh
 
+# =============================================================================
+# Provision a Hetzner box in one of two PROFILES:
+#
+#   app (default) - a workload box: docker, litestream, the full app stack.
+#   mon           - the stateless observability viewer (SPRINT B3). Same
+#                   hardening, none of the workload runtime. Holds no data, so
+#                   it can be destroyed and rebuilt freely.
+#
+# Only the cloud-init template and the name prefix differ; everything else
+# (port randomization, ssh config, keyscan) is deliberately shared, so the two
+# profiles can never drift apart on the parts that matter for access.
+#
+# Usage: make vps-new              /  ./vps-provision.sh
+#        make vps-new-mon          /  ./vps-provision.sh --profile mon
+# =============================================================================
+
+PROFILE="app"
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --profile) PROFILE="$2"; shift 2 ;;
+        *)
+            echo -e "${C_ERROR}❌ Unknown argument '$1'.${C_RESET}"
+            echo -e "${C_INFO}   Usage: ./vps-provision.sh [--profile app|mon]${C_RESET}"
+            exit 1
+            ;;
+    esac
+done
+
+case "$PROFILE" in
+    app)
+        TEMPLATE="./vps-user_data.yml.template"
+        NAME_PREFIX="$VPS_BASE_NAME"
+        ;;
+    mon)
+        TEMPLATE="./vps-mon-user_data.yml.template"
+        NAME_PREFIX="$MON_VPS_BASE_NAME"
+        ;;
+    *)
+        echo -e "${C_ERROR}❌ Unknown profile '$PROFILE' (expected 'app' or 'mon').${C_RESET}"
+        exit 1
+        ;;
+esac
+
+if [ ! -f "$TEMPLATE" ]; then
+    echo -e "${C_ERROR}❌ Could not find $TEMPLATE.${C_RESET}"
+    exit 1
+fi
+
 # 1. Check configuration variables availability
 echo -e "\n${C_INFO}🔍 Checking Pre-requisites...${C_RESET}"
 if [[ -z "$SSH_HOME_PATH" || -z "$SSH_PUBLIC_KEY_PATH" || -z "$SSH_PRIVATE_KEY_PATH" || -z "$VPS_BASE_NAME" || -z "$VPS_TYPE" || -z "$VPS_LOCATION" || -z "$VPS_IMAGE" || -z "$ENVIRONMENT" || -z "$VPS_ADMIN_USER" || -z "$LITESTREAM_VERSION" ]]; then
@@ -12,16 +61,17 @@ if [[ -z "$SSH_HOME_PATH" || -z "$SSH_PUBLIC_KEY_PATH" || -z "$SSH_PRIVATE_KEY_P
     exit 1
 fi
 
-# 1. Calculate Next VPS ID
-LAST_ID=$(hcloud server list -o noheader -o columns=name | grep "$VPS_BASE_NAME" | sed "s/$VPS_BASE_NAME//" | sort -n | tail -1)
+# 1. Calculate Next VPS ID. Numbering is PER PREFIX, so mon boxes and app boxes
+#    count independently and adding a mon box never shifts app box names.
+LAST_ID=$(hcloud server list -o noheader -o columns=name | grep "$NAME_PREFIX" | sed "s/$NAME_PREFIX//" | sort -n | tail -1)
 NEXT_ID=$(( ${LAST_ID:-0} + 1 ))
-SERVER_NAME="${VPS_BASE_NAME}${NEXT_ID}"
+SERVER_NAME="${NAME_PREFIX}${NEXT_ID}"
 
 # 2. Generate Random Port (1022 - 60022)
 RAND_PREFIX=$((10 + RANDOM % 590))
 SSH_PORT="${RAND_PREFIX}22"
 
-echo -e "${C_SUCCESS}🖥  Target: $SERVER_NAME | Port: $SSH_PORT | Region: $VPS_LOCATION${C_RESET}"
+echo -e "${C_SUCCESS}🖥  Target: $SERVER_NAME | Profile: $PROFILE | Port: $SSH_PORT | Region: $VPS_LOCATION${C_RESET}"
 
 # 3. Prepare Cloud Config
 SSH_PUBLIC_KEY=$(cat "$SSH_PUBLIC_KEY_PATH")
@@ -30,7 +80,7 @@ sed -e "s|{{SSH_KEY}}|$SSH_PUBLIC_KEY|g" \
     -e "s|{{SSH_PORT}}|$SSH_PORT|g" \
     -e "s|{{USER}}|$VPS_ADMIN_USER|g" \
     -e "s|{{LITESTREAM_VERSION}}|$LITESTREAM_VERSION|g" \
-    ./vps-user_data.yml.template > vps-user_data.yml
+    "$TEMPLATE" > vps-user_data.yml
 
 # 4. Provision via Hetzner CLI
 echo -e "${C_INFO}☁️  Calling Hetzner API...${C_RESET}"
@@ -40,7 +90,8 @@ hcloud server create \
   --location "$VPS_LOCATION" \
   --image "$VPS_IMAGE" \
   --user-data-from-file vps-user_data.yml \
-  --label env="$ENVIRONMENT"
+  --label env="$ENVIRONMENT" \
+  --label profile="$PROFILE"
 
 rm vps-user_data.yml
 SERVER_IP=$(hcloud server ip "$SERVER_NAME")
@@ -104,8 +155,21 @@ echo -e "${C_SUCCESS}🎉 DEPLOYMENT COMPLETE!${C_RESET}"
 echo -e "   ${C_WARN}It's strongly advised that you setup a Hetzner Firewall allowing ONLY the SSH PORT: ${SSH_PORT}${C_RESET}"
 echo -e "   Login: ${C_SUCCESS}ssh $SERVER_NAME${C_RESET}"
 echo -e "------------------------------------------------"
-echo -e "   ${C_WARN}If you'll use Litestream backups (make vps-litestream-add) and your R2 API${C_RESET}"
-echo -e "   ${C_WARN}token has Client IP Address Filtering enabled, allowlist this box now:${C_RESET}"
-echo -e "   IPv4: ${C_HIGH}$SERVER_IP/32${C_RESET}"
-echo -e "   IPv6: ${C_HIGH}$SERVER_IPV6/128${C_RESET}"
-echo -e "------------------------------------------------"
+
+if [ "$PROFILE" = "mon" ]; then
+    # The box is now a hardened host with the viewer's TOOLING - but no repo, no
+    # registry and no key to reach the fleet. Those are operator state and are
+    # deliberately NOT in user-data (Hetzner retains it and the metadata service
+    # serves it), so they ship separately over SSH.
+    echo -e "   ${C_INFO}This is a MON box - stateless by design. Finish the setup with:${C_RESET}"
+    echo -e "   ${C_HIGH}make vps-mon-setup${C_RESET}"
+    echo -e "   ${C_INFO}It ships the viewer, generates this box's OWN ssh key, and${C_RESET}"
+    echo -e "   ${C_INFO}authorizes it on each app box. Re-run it whenever the fleet changes.${C_RESET}"
+    echo -e "------------------------------------------------"
+else
+    echo -e "   ${C_WARN}If you'll use Litestream backups (make vps-litestream-add) and your R2 API${C_RESET}"
+    echo -e "   ${C_WARN}token has Client IP Address Filtering enabled, allowlist this box now:${C_RESET}"
+    echo -e "   IPv4: ${C_HIGH}$SERVER_IP/32${C_RESET}"
+    echo -e "   IPv6: ${C_HIGH}$SERVER_IPV6/128${C_RESET}"
+    echo -e "------------------------------------------------"
+fi

@@ -7,6 +7,7 @@ include ../config.mk
 SHELL := /bin/bash
 
 PROVISION_SCRIPT         := ./vps-provision.sh
+MON_SETUP_SCRIPT         := ./vps-mon-setup.sh
 DESTROY_SCRIPT           := ./vps-destroy.sh
 LIST_SCRIPT              := ./vps-list.sh
 HEALTH_SCRIPT            := ./vps-health-check.sh
@@ -29,6 +30,12 @@ help: ## Show this help message
 
 vps-new:  ## Provision a new server
 	@$(PROVISION_SCRIPT)
+
+vps-new-mon: ## Provision a new stateless MON viewer box
+	@$(PROVISION_SCRIPT) --profile mon
+
+vps-mon-setup: ## Ship the viewer + link the mon box to the fleet (idempotent)
+	@$(MON_SETUP_SCRIPT)
 
 vps-down: ## Destroy a server (Interactive)
 	@$(DESTROY_SCRIPT)
@@ -69,4 +76,4 @@ vps-app-add: ## Orchestrate a client app: R2 buckets + 2 isolated scoped tokens 
 vps-app-remove: ## Decommission a client app: revoke both tokens + deregister Litestream
 	@$(APP_REMOVE_SCRIPT)
 
-.PHONY: help vps-new vps-down vps-list vps-check-health vps-stats vps-stats-enable vps-glances-enable vps-doctor vps-smoke-tunnel vps-litestream-add vps-litestream-remove vps-litestream-smoke vps-app-add vps-app-remove
+.PHONY: help vps-new vps-new-mon vps-mon-setup vps-down vps-list vps-check-health vps-stats vps-stats-enable vps-glances-enable vps-doctor vps-smoke-tunnel vps-litestream-add vps-litestream-remove vps-litestream-smoke vps-app-add vps-app-remove
