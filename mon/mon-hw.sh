@@ -41,6 +41,20 @@ if ! command -v glances > /dev/null 2>&1; then
     exit 1
 fi
 
+# 1b. glances' browser mode is a CURSES app, so it needs a real terminal. Caught
+#     the hard way: over a non-interactive 'ssh host make mon-hw' (no -t), TERM
+#     arrives empty and curses dies mid-initscr, dumping a Python traceback over
+#     what is really just "you didn't ask for a terminal". Say that instead -
+#     and say it BEFORE spending time opening tunnels we'd only tear down.
+if [ -z "$TERM" ] || [ "$TERM" = "dumb" ] || [ "$TERM" = "unknown" ]; then
+    echo -e "\n${C_ERROR}❌ No usable terminal (TERM='${TERM}').${C_RESET}"
+    echo -e "${C_INFO}   The hardware board is a full-screen curses UI - it needs a TTY.${C_RESET}"
+    echo -e "${C_INFO}   Over SSH, ask for one explicitly:${C_RESET}"
+    echo -e "   ${C_HIGH}ssh -t <mon-box> \"cd ${MON_REMOTE_PATH:-/opt/iacarus}/mon && make mon-hw\"${C_RESET}"
+    echo ""
+    exit 1
+fi
+
 # 2. Which boxes? This is the one place the execution context genuinely changes
 #    behaviour (see mon_context in utils.sh):
 #      operator -> ask Hetzner, so boxes with no registered app are still shown
@@ -57,6 +71,21 @@ if [ "$CONTEXT" = "operator" ]; then
 else
     mapfile -t BOXES < <(mon_registry_list | jq -r '.box' 2>/dev/null | sort -u)
     echo -e "   ${C_INFO}context: viewer - fleet read from the registry${C_RESET}"
+fi
+
+# 2b. Include THIS host if it serves glances and nothing above already listed it.
+#     On a mon box the registry only knows boxes that run APPS, so the viewer
+#     host itself would never appear - yet it is the one machine whose health
+#     you cannot check from anywhere else, and the thing you most want to see
+#     when the board looks wrong. Costs nothing: it is already listening on
+#     loopback, so this adds a row, not a connection.
+SELF_HOST=$(hostname)
+
+if ! printf '%s\n' "${BOXES[@]}" | grep -qxF "$SELF_HOST"; then
+    if (exec 3<>"/dev/tcp/127.0.0.1/${MON_GLANCES_PORT}") 2>/dev/null; then
+        exec 3<&-
+        BOXES+=("$SELF_HOST")
+    fi
 fi
 
 if [ ${#BOXES[@]} -eq 0 ]; then
@@ -105,8 +134,6 @@ function port_answers() {
 echo ""
 LOCAL_PORT=$MON_GLANCES_LOCAL_PORT_BASE
 SERVER_IDX=0
-
-SELF_HOST=$(hostname)
 
 for BOX in "${BOXES[@]}"; do
     # THIS box, if the viewer happens to be running on one of them (the mon box
@@ -197,7 +224,11 @@ echo ""
 echo -e "${C_HIGH}📡 IaCarus - HARDWARE BOARD${C_RESET} ${C_INFO}(${SERVER_IDX} box(es) - ENTER to drill in, q to quit)${C_RESET}"
 sleep 1
 
-glances --browser --config "$GLANCES_CONF"
+# Guarded: glances exiting non-zero (a resize race, a mid-session disconnect,
+# or just an unusual quit path) is not an IaCarus failure, and letting it reach
+# the global ERR trap would print the "Script aborted!" panic block over a
+# perfectly normal exit.
+glances --browser --config "$GLANCES_CONF" || true
 
 echo ""
 echo -e "${C_INFO}👋 Board closed - all tunnels torn down.${C_RESET}"
