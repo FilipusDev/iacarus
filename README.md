@@ -8,7 +8,7 @@ inspired by the "The One Person Framework" [article](https://world.hey.com/dhh/t
 Please read this `README` from top to bottom. (Yes, really 😅).
 If you prefer debugging for 2 hours to save 5 minutes of reading -> go to [TL;DR](#🦥-tldr).
 
-Currently (`v0.12.0`) it automates the provisioning of hardened **Hetzner VPS**
+Currently (`v0.13.0`) it automates the provisioning of hardened **Hetzner VPS**
 servers, and **Cloudflare R2** storage buckets using simple Bash scripts and Makefiles.
 
 ## 🗺️ TODO
@@ -55,7 +55,7 @@ tier - check the [Hetzner console](https://console.hetzner.cloud) for
 updated availability, since server types come and go over time.
 We're talking about a few bucks (USD) cheap. Per VPS!
 
-As of now (`v0.12.0`) you'll need 2 accounts: one for Hetzner and one for Cloudflare.
+As of now (`v0.13.0`) you'll need 2 accounts: one for Hetzner and one for Cloudflare.
 
 At Hetzner, we'll manage server boxes (VPS).
 At Cloudflare, we'll manage Zero Trust tunnels and R2 storage buckets.
@@ -340,6 +340,15 @@ cd mon
 make mon-apps    # live app liveness + latency board (public URLs, no creds)
 make mon-hw      # live fleet hardware board (glances over SSH tunnels)
 make mon-check   # what can this machine actually see?
+```
+
+Every board also has a `mon-box-*` twin that runs it **on the always-on mon
+box** instead - same output, checked from a host that sits next to the fleet:
+
+```sh
+make mon-box-apps        # app board, from the mon box
+make mon-box-hw          # hardware board, from the mon box
+make mon-box-apps-once   # one pass, non-zero if anything is down (cron/CI)
 ```
 
 **No web UIs, no time-series database, and no open ports.** Every glances server

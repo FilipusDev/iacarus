@@ -17,6 +17,7 @@ LIST_SCRIPT     := ./mon-list.sh
 REGISTER_SCRIPT := ./mon-register.sh
 APPS_SCRIPT     := ./mon-apps.sh
 HW_SCRIPT       := ./mon-hw.sh
+REMOTE_SCRIPT   := ./mon-remote.sh
 
 help: ## Show this help message
 	@echo -e "\n$(C_HIGH)| 📡 MON | 🦅 IaCarus ${VERSION} - CONTROL PLANE$(C_RESET)"
@@ -42,4 +43,17 @@ mon-apps: ## Live app liveness + latency board (Ctrl-C to stop)
 mon-apps-once: ## One pass over the apps, then exit (non-zero if anything is down)
 	@$(APPS_SCRIPT) --once
 
-.PHONY: help mon-check mon-list mon-register mon-hw mon-apps mon-apps-once
+# --- Same boards, run ON the always-on mon box ------------------------------
+# Identical output; the difference is WHERE the checks originate (next to the
+# fleet, not from your laptop). Latency figures will differ accordingly.
+
+mon-box-hw: ## Hardware board, run on the mon box
+	@$(REMOTE_SCRIPT) mon-hw
+
+mon-box-apps: ## App board, run on the mon box
+	@$(REMOTE_SCRIPT) mon-apps
+
+mon-box-apps-once: ## One app pass on the mon box (non-zero if anything is down)
+	@$(REMOTE_SCRIPT) mon-apps-once --no-tty
+
+.PHONY: help mon-check mon-list mon-register mon-hw mon-apps mon-apps-once mon-box-hw mon-box-apps mon-box-apps-once
