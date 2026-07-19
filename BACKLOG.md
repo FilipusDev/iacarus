@@ -205,9 +205,10 @@ place.
 - Parsing verified with two-file (crossed-midnight) fixtures: count-weighted mean
   correct across the boundary; same-day path unchanged (no regression); `net_win`
   no longer double-counts the `Average:` row. `bash -n` clean.
-- **Live-verify pending:** the true end-to-end proof (real box, `1h` cell
-  populated) can only be observed in the ~21:00-22:00 BRT window after UTC
-  midnight - do a `make vps-stats` run there to close it out.
+- **Live-verified ✅** - `make vps-stats` run at ~21:30 BRT (~00:30 UTC), inside
+  the window where the `1h` cell used to blank, rendered correctly. The
+  cross-midnight day-file span works against a real box, not just fixtures.
+  SPRINT A is fully closed.
 
 **Decision (resolved):** box timezone stays **unmanaged/UTC** (option a) - the
 wrap fix is correct regardless of TZ, and the SPRINT B viewer reads each box's
