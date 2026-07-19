@@ -96,6 +96,23 @@ else
     exit 1
 fi
 
+# 4c. Collect the monitoring facts the app registry needs (SPRINT B0). Asked
+#     HERE, with the other input, so every prompt is answered up front and the
+#     rest of the run is unattended - but only WRITTEN at step 10b, once the app
+#     is actually provisioned. base_url is the canonical origin: the first entry
+#     of $CORS_ORIGIN when several were given.
+BASE_URL="${CORS_ORIGIN%%,*}"
+BASE_URL="$(echo "$BASE_URL" | xargs)"
+
+echo -e "\n${C_INFO}📡 Monitoring registry entry...${C_RESET}"
+echo -n ">  Health endpoint path [/up]: "
+read HEALTH_PATH
+HEALTH_PATH="${HEALTH_PATH:-/up}"
+
+echo -n ">  Display name [$APP_LABEL]: "
+read APP_NAME
+APP_NAME="${APP_NAME:-$APP_LABEL}"
+
 # 5. Get Server Details (Sets $SELECTED_NAME)
 select_server_interactive
 
@@ -177,6 +194,19 @@ else
     exit 1
 fi
 
+# 10b. Record the app in the mon registry (SPRINT B0) so the stateless viewer
+#      can find it. Deliberately NON-fatal and NOT a rollback trigger: by this
+#      point the app is fully provisioned and replicating, so aborting over a
+#      local bookkeeping file would be worse than a warning. Re-running the same
+#      app upserts its row rather than duplicating it.
+echo -e "${C_INFO}📡 Registering '$APP_SLUG' in the mon registry...${C_RESET}"
+if mon_registry_add "$APP_SLUG" "$SELECTED_NAME" "$APP_LABEL" "$BASE_URL" "$HEALTH_PATH" "$APP_NAME"; then
+    echo -e "${C_SUCCESS}✅ Registered for monitoring (${BASE_URL}${HEALTH_PATH}).${C_RESET}"
+else
+    echo -e "${C_WARN}⚠️  Could not write $MON_REGISTRY - the app is fine, but it${C_RESET}"
+    echo -e "${C_WARN}   won't show up in 'make mon'. Add it by hand.${C_RESET}"
+fi
+
 # 11. Confirmation block (secrets stay masked here - see the copy-paste
 #     snippet below for the one credential you actually need to hand off).
 echo ""
@@ -195,6 +225,8 @@ echo -e "     access key : ${C_HIGH}$BKP_ACCESS_KEY_ID${C_RESET} ${C_INFO}(secre
 echo -e "   Upload bucket: ${C_HIGH}$UPL_BUCKET${C_RESET} ${C_INFO}(app-facing; see snippet below for its credential)${C_RESET}"
 echo -e "     token      : ${C_HIGH}$UPL_TOKEN_NAME${C_RESET}"
 echo -e "     CORS origin: ${C_HIGH}$CORS_ORIGIN${C_RESET} ${C_INFO}(GET, PUT; ETag exposed; max-age 3600)${C_RESET}"
+echo -e "${C_SUCCESS}------------------------------------------------${C_RESET}"
+echo -e "   Health check : ${C_HIGH}${BASE_URL}${HEALTH_PATH}${C_RESET} ${C_INFO}(as '$APP_NAME' in the mon registry)${C_RESET}"
 echo -e "${C_SUCCESS}------------------------------------------------${C_RESET}"
 echo -e "   ${C_WARN}Reminder:${C_RESET} if the R2 token has Client IP Address Filtering,"
 echo -e "   allowlist $SELECTED_NAME so replication can reach R2."
