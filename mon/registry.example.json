@@ -1,0 +1,18 @@
+[
+  {
+    "app_slug": "tcg-2026-01-mpl-prd",
+    "box": "hetzner-vps-1",
+    "label": "mpl",
+    "base_url": "https://mpl.example.com",
+    "health_path": "/up",
+    "name": "mpl"
+  },
+  {
+    "app_slug": "tcg-2026-01-web-stg",
+    "box": "hetzner-vps-2",
+    "label": "web",
+    "base_url": "https://staging.example.com",
+    "health_path": "/up",
+    "name": "web (staging)"
+  }
+]

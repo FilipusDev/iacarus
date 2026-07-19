@@ -18,8 +18,10 @@ LITESTREAM_VERSION="v0.3.13"
 # 1. Determine the Project Root (Where .env lives)
 if [ -f ".env" ]; then
   ENV_FILE=".env"
+  PROJECT_ROOT="."
 elif [ -f "../.env" ]; then
   ENV_FILE="../.env"
+  PROJECT_ROOT=".."
 else
   echo -e "${C_ERROR}❌ Error: Could not find .env file.${C_RESET}"
   exit 1
@@ -27,6 +29,14 @@ fi
 
 # 2. Source it
 source "$ENV_FILE"
+
+# --- MON (OBSERVABILITY) CONFIG ---
+
+# The app registry the stateless viewer reads (SPRINT B0). Operator state, NOT
+# source: it carries client base URLs and is gitignored - `mon/registry.example.json`
+# is the committed shape reference. Resolved off PROJECT_ROOT so the path is
+# identical whether a script runs from the repo root or a domain dir.
+MON_REGISTRY="${PROJECT_ROOT}/mon/registry.json"
 
 # --- SSH KEY CONFIG ---
 
