@@ -131,6 +131,13 @@ function port_answers() {
 #    would present as an empty box in the TUI rather than an error here.
 #    -o BatchMode=yes: a box needing a passphrase fails fast instead of hanging
 #    the whole board on an invisible prompt behind the redraw.
+#    -n (stdin from /dev/null) is LOAD-BEARING, not hygiene: these tunnels live
+#    for the whole session alongside a full-screen curses UI on the SAME
+#    terminal. Without it every backgrounded ssh sits reading the tty, competing
+#    with glances for keystrokes - glances then sees its quit condition
+#    immediately, exits, and curses.endwin() fails on a terminal two processes
+#    were fighting over. It surfaces as a bogus 'endwin() returned ERR'
+#    traceback that says nothing about stdin. Same trap mon-check.sh documents.
 echo ""
 LOCAL_PORT=$MON_GLANCES_LOCAL_PORT_BASE
 SERVER_IDX=0
@@ -161,7 +168,7 @@ for BOX in "${BOXES[@]}"; do
         LOCAL_PORT=$((LOCAL_PORT + 1))
     done
 
-    ssh -N -o ExitOnForwardFailure=yes \
+    ssh -N -n -o ExitOnForwardFailure=yes \
            -o BatchMode=yes \
            -o ConnectTimeout=8 \
            -L "${LOCAL_PORT}:127.0.0.1:${MON_GLANCES_PORT}" "$BOX" > /dev/null 2>&1 &
@@ -228,7 +235,32 @@ sleep 1
 # or just an unusual quit path) is not an IaCarus failure, and letting it reach
 # the global ERR trap would print the "Script aborted!" panic block over a
 # perfectly normal exit.
-glances --browser --config "$GLANCES_CONF" || true
+GLANCES_ERR="${WORK_DIR}/glances.stderr"
+GLANCES_RC=0
+glances --browser --config "$GLANCES_CONF" 2> "$GLANCES_ERR" || GLANCES_RC=$?
+
+# glances 3.4.0.3 ALWAYS fails its own teardown. serve_forever() ends with
+# 'finally: self.end()', which calls curses.endwin() on a session curses has
+# already torn down - so even a clean 'q' quit prints a Python traceback ending
+# in '_curses.error: endwin() returned ERR'. It fires AFTER the board has done
+# its job, the exit status is still 0, and there is nothing an operator can act
+# on. Left alone it reads like a crash and buries the real output.
+#
+# So: swallow EXACTLY that, judged BY CONTENT, not by exit status. The unhandled
+# exception makes glances exit 1, so keying off the return code (the obvious
+# first attempt) suppresses nothing - the benign case IS a failure exit.
+# Benign means: one traceback, ending in that specific curses error. Two
+# tracebacks, or any other final error, is something real and gets printed.
+if [ -s "$GLANCES_ERR" ]; then
+    ERR_LAST=$(grep -v '^[[:space:]]*$' "$GLANCES_ERR" | tail -n 1)
+    ERR_TRACES=$(grep -c '^Traceback' "$GLANCES_ERR")
+
+    if [ "$ERR_LAST" = "_curses.error: endwin() returned ERR" ] && [ "$ERR_TRACES" -le 1 ]; then
+        : # known glances teardown noise - the board already did its job
+    else
+        cat "$GLANCES_ERR" >&2
+    fi
+fi
 
 echo ""
 echo -e "${C_INFO}👋 Board closed - all tunnels torn down.${C_RESET}"
