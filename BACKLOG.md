@@ -240,7 +240,15 @@ sync the same way.
   by `select_server_interactive`) when run locally; read a cached inventory on a
   dedicated mon box that may not hold Hetzner creds.
 - **Apps:** a single repo file `mon/registry.json` - a JSON array, one object per
-  app: `{ label, box, base_url, health_path, name }`. **JSON + `jq`** (not YAML):
+  app: `{ app_slug, box, label, base_url, health_path, name }`, **keyed on
+  `app_slug`** (`${PROJECT_CODE}-${APP_LABEL}-${ENVIRONMENT}`, see
+  `vps-rails-app-add.sh`). `label` alone is **not** a valid key: uniqueness is
+  only ever enforced per-box (app-add greps that one box's
+  `/etc/litestream.yml`), so the same label may legally exist on two boxes and
+  would collide fleet-wide. `app_slug` is already fleet-unique - it is what the
+  R2 buckets and scoped tokens are named after. `box` + `label` are retained as
+  fields (removal resolves by them, see below); `project_code` / `environment`
+  stay derivable from the slug. **JSON + `jq`** (not YAML):
   `jq` is already a project dependency, and it gives safe, idempotent
   append/remove without a YAML parser or fragile hand-edits.
 - **Auto-maintenance:** new `utils.sh` helpers `mon_registry_add` /
@@ -250,9 +258,23 @@ sync the same way.
   and the public origin (`$CORS_ORIGIN`); it additionally prompts for
   `health_path` (default `/up`, the Rails health endpoint) and `name` (default =
   label). `base_url` = the canonical origin (first of `$CORS_ORIGIN` if several).
+- **Removal lookup (important):** `vps-rails-app-remove.sh` only ever prompts for
+  **box + label** - it derives `APP_SLUG` from the litestream bucket read at
+  lines ~79-81, *inside* the `if BKP_BUCKET readable` branch, which is allowed to
+  fail non-fatally. So `mon_registry_remove` must **not** depend on that read.
+  It resolves the slug **locally out of the registry** by `(box, label)`
+  (`jq --arg b --arg l 'map(select(.box==$b and .label==$l))'`) and deletes by the
+  `app_slug` it finds. No SSH, no orphaned entry when litestream is unreadable.
+  A miss (app predates the registry, backfill not run) warns and continues -
+  same non-fatal posture as the existing token-revocation warning.
 - **Read path:** a small `mon/` lib fn that emits the app list for B1/B4 to
   iterate (`jq -r`). Keep it the single source of truth - no other target keeps
   its own list.
+- **Privacy:** `mon/registry.json` holds client base URLs and this repo is public
+  (`gh` → `github.com/FilipusDev/iacarus`). It is therefore **gitignored**, with a
+  committed `mon/registry.example.json` carrying fake entries - mirroring the
+  existing `.env` / `.env.example` split. The registry is local operator state,
+  not source.
 - **Backfill:** the registry starts empty; already-provisioned apps aren't in it.
   Provide a one-shot manual `mon-register` (or a documented hand-seed) to add
   existing apps once - small, since the fleet is tiny today.
@@ -262,6 +284,11 @@ sync the same way.
   lists across targets.
 - `make vps-app-add` appends its app; `make vps-app-remove` drops it; re-running
   either is idempotent (no dupes, no error on missing).
+- Two apps sharing a `label` on **different boxes** coexist without collision,
+  and removing one leaves the other intact.
+- `vps-app-remove` still deregisters cleanly when the litestream bucket read
+  fails (no orphaned registry entry).
+- The live registry is never committed; `mon/registry.example.json` is.
 
 ---
 
@@ -350,6 +377,50 @@ a laptop. Optional - the viewer already runs locally (B1).
 
 ---
 
+## 🧊 Parked - SPRINT C / D sketches (NOT ratified)
+
+> Captured so they stop floating around. **Nothing here is a decision.** These
+> are dreams-out-loud plus a third-party prompt sketch, kept only so SPRINT B
+> can be built without forgetting where it might lead. Do not treat any of it as
+> designed, scoped, or agreed. Re-open properly once B0-B4 are green.
+
+**Origin (verbatim intent):** *"maybe a SPRINT C, where I could have alerts?
+maybe reports of the monitoring? and maybe a D SPRINT with a nice 'status' page
+for all my boxes' apps."*
+
+### C? Alerting + light reports
+
+- A cron-driven check loop over the B0 registry: non-200 or latency over a
+  threshold dispatches a message out (Telegram bot / webhook / email).
+- A daily digest ("pulse") summarising 24h of availability into one message.
+
+### D? Public status page
+
+- A cron/CI loop compiles a **static** `status.html` (vanilla HTML/CSS, our
+  design tokens) and ships it to a public R2 bucket behind a custom domain.
+  Zero compute, cached at the edge, nothing to keep alive.
+
+### ⚠️ Unresolved before either can be scoped
+
+- **Alert state.** A truly stateless loop re-alerts every run for the whole
+  outage. Dedup/hysteresis needs *somewhere* to remember "already told you".
+  Where does that live, and what suppresses flapping? This is the actual design
+  question in C, not a detail.
+- **Who runs the loop.** C's cron and D's generator both need an always-on
+  host. On a laptop, the status page freezes green at lid-close while a box
+  burns. This makes **B3 (mon box) a prerequisite for C/D, not "optional"** -
+  contradicting B3's current framing. Resolve before scoping either.
+- **Freshness vs. edge cache.** "Un-killable + cached" and "reflects reality"
+  pull against each other; someone owns the R2 cache TTL and the staleness
+  window that comes with it.
+- **No mail pipeline exists.** There is no SES/SMTP path anywhere in this repo
+  today. Any email-based C story is building that from zero first.
+- **Prompt-mode caveat.** A piped `bash -s` heredoc cannot read `y/N` (A1's
+  lesson). Any C script wanting confirmation uses the vps-doctor pattern:
+  prompt locally, act via discrete `ssh -n`.
+
+---
+
 ## 📌 Decisions locked (do not relitigate)
 
 - Historical stats collector = **`sysstat`/sar**, sampled every **2 min** via a
@@ -361,10 +432,15 @@ a laptop. Optional - the viewer already runs locally (B1).
   dedicated-box are the same viewer.
 - Zero-ingress is sacred: all mon traffic rides **SSH tunnels**, never new open
   ports.
-- App registry (B0) = **in-repo `mon/registry.json`**, JSON + `jq`,
-  **auto-maintained** by `vps-app-add`/`vps-app-remove`. Not litestream-derived
-  (labels carry no health path; deriving needs infra creds every run). Explicit
-  record lets the app viewer run from a credential-less laptop with just `curl`.
+- App registry (B0) = **`mon/registry.json`**, JSON + `jq`, **auto-maintained**
+  by `vps-app-add`/`vps-app-remove`. Not litestream-derived (labels carry no
+  health path; deriving needs infra creds every run). Explicit record lets the
+  app viewer run from a credential-less laptop with just `curl`.
+- Registry key (B0) = **`app_slug`**, not `label` - label is only unique per box
+  and collides fleet-wide. Removal resolves the slug locally by `(box, label)`
+  via `jq`, never via the litestream bucket read (which may fail).
+- Registry file (B0) = **gitignored**, shipped as `mon/registry.example.json`.
+  Public repo; the live file holds client base URLs. Operator state, not source.
 
 ## ❓ Open questions to resolve before coding
 
