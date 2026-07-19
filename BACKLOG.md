@@ -428,7 +428,7 @@ a laptop. Optional - the viewer already runs locally (B1).
 
 ---
 
-### B4 🔴 App observability - home-grown sh/curl TUI
+### B4 🟢 App observability - home-grown sh/curl TUI
 
 **Why:** "apps observability, liveness, speed, latency" - our style, no web UI.
 
@@ -442,12 +442,86 @@ a laptop. Optional - the viewer already runs locally (B1).
 - Reuse SPRINT A metric helpers where an app check also wants box context.
 
 **Acceptance**
-- `make mon-apps` → live liveness+latency board for all registered apps.
-- Pure sh + curl + jq; no daemon, no database, no web page.
+- `make mon-apps` → live liveness+latency board for all registered apps. ✅
+- Pure sh + curl + jq; no daemon, no database, no web page. ✅
 
-**Open Qs**
-- Public URL checks vs. tunnelled internal checks (or both)?
-- Alerting later (SPRINT C?) - for now, eyeball the TUI. Out of scope here.
+**Delivered** - `mon/mon-apps.sh`, targets `mon-apps` (live) + `mon-apps-once`:
+- Per-app row: HTTP code, per-phase timing (DNS / CONN / TLS / TTFB / TOTAL, in
+  ms) and TLS days-to-expiry, verdict 🟢/🟡/🔴 on TOTAL against
+  `MON_LATENCY_WARN_MS` / `MON_LATENCY_CRIT_MS` (both `.env`-overridable, as are
+  `MON_REFRESH_SECONDS`, `MON_HTTP_TIMEOUT`, `MON_TLS_WARN_DAYS`).
+- curl reports *cumulative* timings; the board converts them to per-phase
+  deltas, guarding the TLS phase so plain-http apps render 0 rather than a
+  negative.
+- **TLS expiry is read once per run**, not per redraw: certificates don't change
+  between refreshes and probing costs a second full handshake per app. `openssl`
+  is optional - absent, the column reads `-`.
+- Redraw homes the cursor + clears to end of screen instead of `clear` (no
+  flicker, scrollback survives); cursor is hidden during the loop and restored
+  by an INT/TERM trap.
+- `--once` is the scriptable form and **exits non-zero when anything is 🔴** -
+  the natural thing for a SPRINT C alerting cron to call.
+- Deliberately not `set -e`: a failing curl is the signal, not an abort.
+
+**Verified** against a local fixture server producing real failures: plain-http
+(no TLS phase, `-` cert), 200-but-slow → 🟡, 200-but-very-slow → 🔴, 404, 500,
+connection-refused → `---`, and curl timeout → all render rather than blanking
+the board. Exit codes correct in every case; threshold overrides honoured; live
+loop redraws on interval and restores the cursor on Ctrl-C.
+
+**Bug found + fixed while testing:** `--once` first decided its exit code by
+grepping the rendered board for 🔴 - which always matched, because the legend
+line under the table contains a literal 🔴. Every healthy board reported
+failure. Now `draw_board` returns a real status from its own counters.
+
+**KNOWN TRADEOFF (documented in-script):** checks are sequential, so a pass
+costs the SUM of all response times - worst case `MON_HTTP_TIMEOUT` x (down
+apps), which can outlast the refresh interval. Observed: a 6-app fixture with a
+3s app managed one pass per 5s. Fine at current fleet size; the fix when it
+isn't is background jobs + `wait`, not a daemon.
+
+**Resolved Open Q:** public URL checks only, for now. The registry's `base_url`
+is the public origin, checks need no credentials, and that is what keeps the
+board runnable from anywhere. Tunnelled internal checks stay unbuilt until
+something actually needs them.
+
+**Status glyph = ANSI-coloured `●`, not 🟢/🟡/🔴.** Emoji carry their own palette
+from whichever font wins the fontconfig match, and Font Awesome (monochrome,
+installed system-wide) beat Noto Color Emoji for U+1F7E2/E1/E4 - rendering every
+state as the same grey blob, i.e. a status column conveying nothing. Emoji are
+also double-width, so the column's width depended on font fallback. `●` takes
+the terminal's own colours and is single-width. Prose emoji elsewhere stay.
+
+**Alignment bug (fixed):** the header used `%7s` while data cells were `%6s` +
+`"ms"` = 8 chars, drifting one column per field, cumulatively. Separately,
+colouring *inside* a printf format string skews everything after it, because
+printf counts ANSI escapes as visible characters. Fields are now padded to width
+first and coloured second; the separator is derived from the same arithmetic.
+Verified every rendered row is byte-identical in width.
+
+**False all-clear (fixed):** run from anywhere but `mon/`, `source ../config.sh`
+resolved outside the repo and failed *silently* - the ERR trap lives in
+`utils.sh`, which hadn't loaded either - so the board printed "🤷 No apps
+registered - nothing to watch" and exited **0**. A monitoring tool reporting a
+clean board because it couldn't find its own config is the worst failure mode
+available. All four `mon/` scripts now guard the source and exit 1. NOTE the
+same latent pattern exists in `hetzner/` and `cloudflare/` scripts.
+
+**Latency baseline (measured, not guessed):** `/up` answers in **3-6ms on the
+box**; from a laptop in Brazil it reads ~250ms steady with reconnect outliers
+near 580ms. Handshake numbers (DNS 2ms, connect ~11ms, TLS ~17ms) show TLS
+terminating at a Cloudflare edge near São Paulo, so the ~220ms TTFB is the
+edge→Helsinki origin round trip, not Rails. Samples are **bimodal** (~220ms vs
+~550ms, nothing between = one extra round trip) and the box shows no such split,
+placing the variance entirely in the CF↔origin tunnel path. The app is not slow;
+the planet is wide. Defaults raised to WARN 1200 / CRIT 3000 to sit above that
+noise, and `.env.example` now documents all `MON_*` knobs.
+
+**Design consequence for B3/SPRINT C:** these thresholds describe *the observer*,
+not the app. The same fleet reads ~250ms from Brazil and would read ~10ms from a
+European mon box - so whichever host ends up doing the alerting cannot inherit
+another host's numbers. If mon boxes and laptops ever both alert, thresholds
+belong per-viewer (or per-app in the registry), not as one global pair.
 
 ---
 
@@ -522,3 +596,5 @@ for all my boxes' apps."*
    file.~~ **RESOLVED** → in-repo `mon/registry.json`, auto-maintained (see B0 +
    Decisions locked).
 2. B2: glances server bind/auth (localhost+tunnel assumed).
+3. ~~B4: public URL checks vs. tunnelled internal checks.~~ **RESOLVED** →
+   public URL only; no credentials needed, so the board runs from anywhere.

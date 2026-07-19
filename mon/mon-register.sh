@@ -2,8 +2,16 @@
 
 set -e
 
-source ../config.sh
-source ../utils.sh
+# Sourced with a guard: run from anywhere but mon/ and these paths resolve
+# outside the repo and fail SILENTLY (the ERR trap lives in utils.sh, which
+# hasn't loaded yet either) - leaving the script running with no config and no
+# helpers. For a monitoring tool that surfaces as a false "nothing to watch"
+# all-clear, which is worse than any error. Fail loudly instead.
+if ! source ../config.sh 2>/dev/null || ! source ../utils.sh 2>/dev/null; then
+    echo "❌ Could not load ../config.sh + ../utils.sh."
+    echo "   Run this from the mon/ directory, or use the Makefile target."
+    exit 1
+fi
 
 # =============================================================================
 # 📡 MON - hand-register an existing app (SPRINT B0 backfill / B1)
