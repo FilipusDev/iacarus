@@ -205,9 +205,10 @@ place.
 - Parsing verified with two-file (crossed-midnight) fixtures: count-weighted mean
   correct across the boundary; same-day path unchanged (no regression); `net_win`
   no longer double-counts the `Average:` row. `bash -n` clean.
-- **Live-verify pending:** the true end-to-end proof (real box, `1h` cell
-  populated) can only be observed in the ~21:00-22:00 BRT window after UTC
-  midnight - do a `make vps-stats` run there to close it out.
+- **Live-verified ✅** - `make vps-stats` run at ~21:30 BRT (~00:30 UTC), inside
+  the window where the `1h` cell used to blank, rendered correctly. The
+  cross-midnight day-file span works against a real box, not just fixtures.
+  SPRINT A is fully closed.
 
 **Decision (resolved):** box timezone stays **unmanaged/UTC** (option a) - the
 wrap fix is correct regardless of TZ, and the SPRINT B viewer reads each box's
@@ -404,9 +405,24 @@ reusing SPRINT A's on-box data where sensible.
 - `make mon-hw` → one TUI listing every app box, drill into each, live.
 - No new inbound firewall rules on any app box.
 
-**Open Q**
-- Glances server auth + bind: enforce localhost-only + SSH tunnel (preferred) vs.
-  password-protected bind. Default: **localhost + tunnel**.
+**Open Q → RESOLVED:** bind `127.0.0.1`, reach it over an SSH tunnel, and run
+**no glances password**. Reasoning, so it isn't reopened:
+- Glances' documented default bind is `0.0.0.0` - every interface, including the
+  public IP - and it serves the full process list, users and container names.
+  Binding publicly would make "zero open ports" a property enforced by *one
+  firewall rule* instead of by the process not listening. Localhost makes the
+  kernel refuse the connection regardless of what any rule says, demoting the
+  firewall to a second line of defense rather than the only one.
+- With a localhost bind, the only reachable party is someone who already holds a
+  shell on the box - who by definition has strictly more access than glances
+  would grant. A password there protects nobody.
+- SSH is already the authenticator: key-only, root disabled, randomized port,
+  known-hosts managed by `vps-provision`. Glances inherits all of it for free. A
+  glances password would be a *second* credential system to store on every
+  viewer and rotate across every box.
+- The XML-RPC channel could not be confirmed (from the docs) to use TLS; the
+  prior is plain HTTP. A tunnelled design makes that question moot instead of
+  load-bearing - which is the stronger property.
 
 ---
 
@@ -580,6 +596,10 @@ for all my boxes' apps."*
   dedicated-box are the same viewer.
 - Zero-ingress is sacred: all mon traffic rides **SSH tunnels**, never new open
   ports.
+- Glances (B2) = **bind `127.0.0.1`, SSH tunnel, no glances password** (B2 Open Q,
+  resolved). SSH is the authenticator; a public bind would rest zero-ingress on a
+  firewall rule instead of on the process not listening, and would add a second
+  credential system to rotate across every box and viewer.
 - App registry (B0) = **`mon/registry.json`**, JSON + `jq`, **auto-maintained**
   by `vps-app-add`/`vps-app-remove`. Not litestream-derived (labels carry no
   health path; deriving needs infra creds every run). Explicit record lets the
@@ -595,6 +615,10 @@ for all my boxes' apps."*
 1. ~~B0: app health registry = litestream-label-derived vs. a `mon.d` config
    file.~~ **RESOLVED** → in-repo `mon/registry.json`, auto-maintained (see B0 +
    Decisions locked).
-2. B2: glances server bind/auth (localhost+tunnel assumed).
+2. ~~B2: glances server bind/auth (localhost+tunnel assumed).~~ **RESOLVED** →
+   localhost bind + SSH tunnel, no glances password (see B2 + Decisions locked).
+   What remains in B2 is *not* a security question but a mechanical one: how the
+   viewer maps N boxes onto N distinct local ports and generates the
+   `glances.conf` server list from the registry.
 3. ~~B4: public URL checks vs. tunnelled internal checks.~~ **RESOLVED** →
    public URL only; no credentials needed, so the board runs from anywhere.
