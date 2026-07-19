@@ -1,0 +1,118 @@
+#cloud-config
+# =============================================================================
+# 🦅 IaCarus - MON BOX PROFILE (SPRINT B3)
+#
+# A cheap, always-on host for the STATELESS viewer. It holds NO monitoring data
+# of its own: the sar history lives on the app boxes and the app health checks
+# hit public URLs, so this box can be destroyed and rebuilt at any time and
+# nothing is lost. Rebuild it, re-run 'make vps-mon-setup', done.
+#
+# Differences from the app profile (vps-user_data.yml.template) and why:
+#   - NO docker / docker-buildx : it runs no workloads, only the viewer.
+#   - NO litestream             : it has no database to replicate.
+#   - NO secrets of any kind    : user-data is retrievable from the metadata
+#                                 service and retained by Hetzner, so the SSH
+#                                 key it uses to reach app boxes is GENERATED
+#                                 ON THIS BOX by 'make vps-mon-setup' and never
+#                                 travels. Nothing here is confidential.
+#   + viewer tooling            : glances (client AND server), curl, jq, make,
+#                                 git - what mon/*.sh actually shells out to.
+#
+# IDENTICAL to the app profile: every hardening control. Same SSH lockdown,
+# same ufw default-deny, same fail2ban, same unattended-upgrades. The viewer is
+# still OUTBOUND-ONLY and zero-ingress apart from its randomized SSH port.
+# =============================================================================
+users:
+  - name: {{USER}}
+    groups: users, admin
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    ssh_authorized_keys:
+      - {{SSH_KEY}}
+
+package_update: true
+package_upgrade: true
+
+swap:
+  filename: /swapfile
+  size: 2147483648
+  maxsize: 2147483648
+
+packages:
+  - git
+  - ufw
+  - fail2ban
+  - unattended-upgrades
+  - htop
+  - vim
+  - ncdu
+  - curl
+  - jq
+  - make
+  - sysstat
+  - glances
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/hardening.conf
+    content: |
+      Port {{SSH_PORT}}
+      PermitRootLogin no
+      PasswordAuthentication no
+      ChallengeResponseAuthentication no
+      AllowUsers {{USER}}
+      AuthorizedKeysFile .ssh/authorized_keys
+
+  - path: /etc/fail2ban/jail.d/sshd.local
+    content: |
+      [sshd]
+      enabled = true
+      port = {{SSH_PORT}}
+      bantime = 1h
+      maxretry = 5
+      backend = systemd
+
+  - path: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+
+  - path: /etc/systemd/system/sysstat-collect.timer.d/iacarus.conf
+    content: |
+      # IaCarus: collect every 2 min - see the app profile for the full note.
+      # The mon box is a box too: 'make vps-stats' should work against it.
+      [Timer]
+      OnCalendar=
+      OnCalendar=*:00/02
+
+  - path: /etc/systemd/system/glances.service.d/iacarus.conf
+    content: |
+      # IaCarus: pin the glances server to LOOPBACK (SPRINT B2).
+      #
+      # The mon box runs the glances SERVER as well as the client, so the thing
+      # watching the fleet is itself watchable - if the viewer host is wedged,
+      # that is exactly when you want to see it. 'make mon-hw' run ON this box
+      # reads it straight off 127.0.0.1 with no tunnel; run from a laptop it is
+      # tunnelled like any other box.
+      #
+      # The empty ExecStart= first clears the packaged value; without it systemd
+      # would APPEND ours and refuse to start with two ExecStart lines.
+      [Service]
+      ExecStart=
+      ExecStart=/usr/bin/glances -s -B 127.0.0.1
+      Restart=always
+      RestartSec=5
+
+runcmd:
+  - rm -f /etc/ssh/sshd_config.d/50-cloud-init.conf
+  - ufw default deny incoming
+  - ufw default allow outgoing
+  - ufw allow {{SSH_PORT}}/tcp
+  - ufw enable
+  - systemctl restart ssh
+  - systemctl enable fail2ban
+  - systemctl restart fail2ban
+  - sed -i 's/^ENABLED=.*/ENABLED="true"/' /etc/default/sysstat
+  - systemctl daemon-reload
+  - systemctl enable --now sysstat-collect.timer
+  - systemctl start sysstat-collect.service
+  - systemctl enable --now glances

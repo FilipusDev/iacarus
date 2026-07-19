@@ -318,6 +318,82 @@ Enter number (or 'q' to quit): 1
 ✅ Done.
 ```
 
+### make vps-glances-enable
+
+`make vps-glances-enable` retrofits the **glances server** onto a box provisioned
+**before** SPRINT B, so it shows up on the fleet hardware board (`make mon-hw`).
+Fresh boxes (`make vps-new`) get it from cloud-init - the same split as
+`make vps-stats-enable`.
+
+It's idempotent: it installs `glances` if missing, pins the server to
+`127.0.0.1` via a systemd drop-in, and restarts it. **No firewall port is
+opened** - the viewer reaches it over an SSH tunnel.
+
+> **Why pin a bind Ubuntu already sets?** The 24.04 package happens to ship
+> `glances -s -B 127.0.0.1` and enables it for you. That's a *packaging
+> default*, not a contract - glances' own documented default is `0.0.0.0`, and
+> the server reports the full process list, logged-in users and container names.
+> The drop-in makes the loopback bind **ours**, so an upgrade can't quietly
+> expose it. There's no glances password on purpose: whoever can reach
+> `127.0.0.1` already holds a shell on the box, and SSH is the authenticator.
+
+The script **refuses to report success** unless it can see the server listening
+on loopback and nothing else.
+
+```sh
+iacarus/hetzner main ❯ make vps-glances-enable
+
+🔍 Fetching server list from Hetzner...
+Select a server:
+1) ***527010:hetzner-vps-2:<IPv4-IP>:running
+Enter number (or 'q' to quit): 1
+
+🔌 Testing connection to hetzner-vps-2... OK
+
+📈 Enabling the glances server on hetzner-vps-2...
+----------------------------------------
+✅ glances already installed.
+✅ glances server listening on 127.0.0.1:61209 (loopback only).
+   Reach it with 'make mon-hw' - it opens the SSH tunnel for you.
+
+----------------------------------------
+✅ Done.
+```
+
+### make vps-new-mon
+
+`make vps-new-mon` provisions a **MON box**: an always-on host for the stateless
+observability viewer. Same `vps-new` flow, different cloud-init profile
+(`--profile mon`).
+
+It gets **every hardening control the app profile has** - SSH lockdown, ufw
+default-deny, fail2ban, unattended-upgrades - and none of the workload runtime
+(no docker, no litestream). It adds the viewer's tooling instead: glances, curl,
+jq, make, git.
+
+The box holds **no monitoring data** (that lives on the app boxes), so it is
+disposable by design: destroy and rebuild it freely.
+
+### make vps-mon-setup
+
+`make vps-mon-setup` finishes the job - it ships the **operator state** that must
+never ride in cloud-init user-data (Hetzner retains user-data, and the metadata
+service serves it back to anything on the box):
+
+1. the viewer itself (`mon/`, `config.sh`, `utils.sh`) as a copy, not a checkout
+2. `mon/registry.json` - which apps exist and where their health lives
+3. a **credential-less `.env`** - `MON_*` tuning only, no Hetzner or Cloudflare
+   keys, so a stolen mon box grants no infrastructure access
+4. an SSH keypair **generated on the box**, whose public half is then authorized
+   on each app box - your laptop's private key is never copied there
+
+It's idempotent - **re-run it whenever the fleet or the registry changes**. It
+rewrites the mon box's ssh config in full, so a destroyed-and-recreated app box
+leaves no stale entry behind. It finishes by running `make mon-check` *on the
+box*, so the verdict comes from there rather than from your laptop.
+
+See [`mon/OPERATING.md`](../mon/OPERATING.md) for the day-to-day routine.
+
 ### make vps-doctor
 
 `make vps-doctor` helps you **reclaim disk space** - the classic

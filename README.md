@@ -8,15 +8,16 @@ inspired by the "The One Person Framework" [article](https://world.hey.com/dhh/t
 Please read this `README` from top to bottom. (Yes, really 😅).
 If you prefer debugging for 2 hours to save 5 minutes of reading -> go to [TL;DR](#🦥-tldr).
 
-Currently (`v0.11.1`) it automates the provisioning of hardened **Hetzner VPS**
+Currently (`v0.12.0`) it automates the provisioning of hardened **Hetzner VPS**
 servers, and **Cloudflare R2** storage buckets using simple Bash scripts and Makefiles.
 
 ## 🗺️ TODO
 
 Monitoring the server (disk pruning of logs/docker crap) plus near-online
-observability across the fleet is now planned and tracked in
-[`BACKLOG.md`](./BACKLOG.md) - see **SPRINT A** (on-box `vps-stats` / `vps-doctor`)
-and **SPRINT B** (the TUI monitoring box).
+observability across the fleet is planned and tracked in
+[`BACKLOG.md`](./BACKLOG.md). **SPRINT A** (on-box `vps-stats` / `vps-doctor`)
+and **SPRINT B** (the TUI monitoring box) are both **done** - day-to-day usage
+lives in [`mon/OPERATING.md`](./mon/OPERATING.md).
 
 ## 🦥 TL;DR
 
@@ -54,7 +55,7 @@ tier - check the [Hetzner console](https://console.hetzner.cloud) for
 updated availability, since server types come and go over time.
 We're talking about a few bucks (USD) cheap. Per VPS!
 
-As of now (`v0.11.1`) you'll need 2 accounts: one for Hetzner and one for Cloudflare.
+As of now (`v0.12.0`) you'll need 2 accounts: one for Hetzner and one for Cloudflare.
 
 At Hetzner, we'll manage server boxes (VPS).
 At Cloudflare, we'll manage Zero Trust tunnels and R2 storage buckets.
@@ -113,6 +114,10 @@ During the process you might need to provide a payment method.
 5. **curl, jq:** used to talk to the Cloudflare API directly (token minting/
    revocation for the multi-tenant app orchestrator, `make vps-app-add` /
    `make vps-app-remove`).
+
+6. **glances:** the fleet hardware board (`make mon-hw`) drives it in browser
+   mode. Only needed on the **viewer** - the boxes get their own copy from
+   cloud-init. Install with `pacman -S glances` / `apt install glances`.
 
 ## 📝 Configuration
 
@@ -322,6 +327,37 @@ iacarus main ❯ make setup
 Now, you may proceed to [Hetzner README](./hetzner/README.md)
 
 Or to [Cloudflare README](/cloudflare/README.md)
+
+## 📡 Observability
+
+The fleet is watched by a **stateless, portable viewer**: monitoring data lives
+on the app boxes, and the viewer is a thin client that SSHes in and renders. The
+same `make` targets run from your laptop or from a dedicated always-on mon box -
+where it runs is a runtime choice, never a code fork.
+
+```sh
+cd mon
+make mon-apps    # live app liveness + latency board (public URLs, no creds)
+make mon-hw      # live fleet hardware board (glances over SSH tunnels)
+make mon-check   # what can this machine actually see?
+```
+
+**No web UIs, no time-series database, and no open ports.** Every glances server
+binds `127.0.0.1` and is reached exclusively over an SSH tunnel, so zero-ingress
+is a property of the process not listening rather than of a firewall rule.
+
+An optional always-on viewer host is one command away:
+
+```sh
+cd hetzner
+make vps-new-mon      # hardened box, viewer tooling, no workloads
+make vps-mon-setup    # ship the viewer; it generates its OWN ssh key
+```
+
+That box is **credential-less and disposable** - it holds no monitoring data and
+no infrastructure secrets, so you can destroy and rebuild it freely.
+
+Full operating guide: [`mon/OPERATING.md`](./mon/OPERATING.md).
 
 ## 📄 License
 

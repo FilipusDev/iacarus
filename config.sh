@@ -61,6 +61,25 @@ MON_HTTP_TIMEOUT="${MON_HTTP_TIMEOUT:-15}"
 # Warn when a TLS certificate expires within this many days.
 MON_TLS_WARN_DAYS="${MON_TLS_WARN_DAYS:-21}"
 
+# Hardware board (B2). The glances server on each box listens on LOOPBACK only,
+# so the viewer reaches every box through its own SSH tunnel - never an open
+# port. MON_GLANCES_PORT is the REMOTE port (the glances default, identical on
+# every box, since nothing else ever sees it). The viewer then allocates one
+# distinct LOCAL port per box starting at MON_GLANCES_LOCAL_PORT_BASE, skipping
+# anything already in use, and points glances' browser mode at those.
+MON_GLANCES_PORT="${MON_GLANCES_PORT:-61209}"
+MON_GLANCES_LOCAL_PORT_BASE="${MON_GLANCES_LOCAL_PORT_BASE:-61209}"
+
+# How long to wait for each SSH tunnel to start accepting connections.
+MON_TUNNEL_TIMEOUT="${MON_TUNNEL_TIMEOUT:-15}"
+
+# Name prefix for MON boxes (B3), kept distinct from VPS_BASE_NAME so the two
+# profiles number independently and a mon box is identifiable at a glance in
+# 'hcloud server list'. Where the viewer lives on that box - the repo is copied
+# there by 'make vps-mon-setup', which also generates the box's own ssh key.
+MON_VPS_BASE_NAME="${MON_VPS_BASE_NAME:-hetzner-mon-}"
+MON_REMOTE_PATH="${MON_REMOTE_PATH:-/opt/iacarus}"
+
 # --- SSH KEY CONFIG ---
 
 SSH_PUBLIC_KEY_PATH=${SSH_PUBLIC_KEY_PATH}

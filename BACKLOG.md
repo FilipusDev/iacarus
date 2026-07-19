@@ -385,62 +385,124 @@ Both now use `ssh -n`, matching A1's discipline.
 
 ---
 
-### B2 🔴 Hardware near-online - Glances central/browser
+### B2 🟢 Hardware near-online - Glances central/browser
 
 **Why:** live multi-box CPU/mem/disk/net TUI matching `MON → APP 1/APP 2`,
 reusing SPRINT A's on-box data where sensible.
 
-**Scope**
-- **On each app box:** install `glances` and run it in **server mode** (data
-  stays on the box). Add to `hetzner/vps-user_data.yml.template` (packages +
-  a `glances.service`), plus a backfill step for existing boxes (pairs naturally
-  with A0's backfill). Bind to localhost and reach it over the SSH tunnel - **do
-  not** open a firewall port (the box is zero-ingress by design; keep it that
-  way).
-- **On the viewer:** `make mon-hw` opens `glances --browser` (or connects to a
-  chosen box) **through SSH port-forwards**, so nothing new is exposed publicly.
-- Confirm glances server honors our "zero open ports" rule - tunnel only.
+**Scope (done)**
+- **On each app box:** `glances` added to `packages:` in
+  `hetzner/vps-user_data.yml.template`, plus a
+  `glances.service.d/iacarus.conf` drop-in and `systemctl enable --now glances`
+  in `runcmd`. Backfill for existing boxes: `make vps-glances-enable`
+  (`hetzner/vps-glances-enable.sh`), idempotent, mirroring `vps-stats-enable`.
+- **On the viewer:** `make mon-hw` (`mon/mon-hw.sh`) - one SSH tunnel per box
+  onto a distinct local port, a generated throwaway `glances.conf`
+  `[serverlist]`, then `glances --browser`. Tunnels are torn down on exit by a
+  trap registered *before* the first one opens.
+- **No firewall change on any box.** Verified externally: `nc` to
+  `<public-ip>:61209` is refused on both the app box and the mon box.
 
-**Acceptance**
-- `make mon-hw` → one TUI listing every app box, drill into each, live.
-- No new inbound firewall rules on any app box.
+**Acceptance (met)**
+- `make mon-hw` → one TUI, `2 Glances servers available`, both `ONLINE`, live
+  LOAD/CPU%/MEM% updating across redraws, `ENTER` drills into a box.
+- No new inbound firewall rules; `ufw` still allows only the randomized SSH port.
 
-**Open Q → RESOLVED:** bind `127.0.0.1`, reach it over an SSH tunnel, and run
-**no glances password**. Reasoning, so it isn't reopened:
-- Glances' documented default bind is `0.0.0.0` - every interface, including the
-  public IP - and it serves the full process list, users and container names.
-  Binding publicly would make "zero open ports" a property enforced by *one
-  firewall rule* instead of by the process not listening. Localhost makes the
-  kernel refuse the connection regardless of what any rule says, demoting the
-  firewall to a second line of defense rather than the only one.
-- With a localhost bind, the only reachable party is someone who already holds a
-  shell on the box - who by definition has strictly more access than glances
-  would grant. A password there protects nobody.
-- SSH is already the authenticator: key-only, root disabled, randomized port,
-  known-hosts managed by `vps-provision`. Glances inherits all of it for free. A
-  glances password would be a *second* credential system to store on every
-  viewer and rotate across every box.
-- The XML-RPC channel could not be confirmed (from the docs) to use TLS; the
-  prior is plain HTTP. A tunnelled design makes that question moot instead of
-  load-bearing - which is the stronger property.
+**Discovery that changed the shape (worth keeping):** Ubuntu 24.04's `glances`
+package **already ships `glances.service` enabled, running
+`glances -s -B 127.0.0.1`** - our decided posture, for free. We did NOT lean on
+that: glances' own documented default bind is `0.0.0.0`, so the loopback bind is
+**restated in a drop-in we own**. Inheriting a packaging default would make
+zero-ingress a property of Ubuntu's packaging decisions rather than of ours, and
+an upgrade could silently move the server onto the public interface.
+
+**Open Q → RESOLVED (the mechanical one):** N boxes map onto N distinct local
+ports by starting at `MON_GLANCES_LOCAL_PORT_BASE` (61209) and incrementing past
+any port already answering locally. The remote port is always 61209 - nothing
+outside the box ever sees it. The `glances.conf` server list is generated per
+run into a temp dir and deleted with the tunnels; **every entry is
+`localhost`**, distinguished by port, with the box name carried in
+`server_N_alias` so the TUI still reads correctly.
+
+**Note - the viewer host is a box too:** `mon-hw` adds the machine it runs on to
+the board when that machine serves glances, reaching it **directly on 127.0.0.1
+with no tunnel** (SSHing to yourself would need an alias for your own hostname
+that nothing creates). Without this the mon box - the one host whose health you
+cannot check from anywhere else - would never appear on its own board.
+
+**Bug caught by live testing (fixed):** `glances --browser` is a curses UI, so a
+non-interactive `ssh host make mon-hw` (no `-t`) arrives with `TERM` empty and
+dies inside `curses.initscr()`, dumping a Python traceback. `mon-hw` now checks
+`TERM` **before opening any tunnel** and prints the `ssh -t` form instead. The
+`glances` call is also `|| true`-guarded so an unusual quit path can't reach the
+global ERR trap and print "Script aborted!" over a normal exit.
 
 ---
 
-### B3 🔴 Dedicated mon box - cloud-init `mon` profile (optional host)
+### B3 🟢 Dedicated mon box - cloud-init `mon` profile (optional host)
 
 **Why:** let the stateless viewer live on a cheap always-on Hetzner box, not just
 a laptop. Optional - the viewer already runs locally (B1).
 
-**Scope**
-- A `mon` variant of the cloud-init template (or a flag on `vps-provision.sh`)
-  that installs the viewer deps (glances client, curl/jq, our scripts) and the
-  SSH keys/aliases needed to reach app boxes - **outbound SSH only**, still
-  zero-ingress.
-- Since the box is stateless, it can be destroyed/recreated freely; document that.
+**Scope (done)**
+- **`hetzner/vps-mon-user_data.yml.template`** - a second cloud-init template
+  (not conditionals in the app one: cloud-init YAML has no conditionals and
+  sed-branching a single template would be fragile). Same hardening controls,
+  byte for byte: SSH lockdown, `ufw` default-deny, fail2ban,
+  unattended-upgrades. Drops docker/buildx and litestream (no workloads, no
+  database). Adds the viewer's tooling: glances, curl, jq, make, git, sysstat.
+  Runs the glances **server** too, so the watcher is itself watchable.
+- **`--profile app|mon` on `vps-provision.sh`** (`make vps-new-mon`). Only the
+  template and the name prefix (`MON_VPS_BASE_NAME`, default `hetzner-mon-`)
+  differ; port randomization, ssh config and keyscan stay shared so the two
+  profiles cannot drift on the parts that govern access. Numbering is per
+  prefix, so adding a mon box never shifts app box names. Boxes are labelled
+  `profile=<app|mon>` in Hetzner.
+- **`hetzner/vps-mon-setup.sh`** (`make vps-mon-setup`) - ships the operator
+  state that must never ride in user-data, and is idempotent.
 
-**Acceptance**
-- `make vps-new` (mon profile) → a box from which `make mon` just works.
-- Rebuilding the mon box loses nothing (all data is on the app boxes).
+**Acceptance (met)** - verified on a real box, `hetzner-mon-1` (hel1, cx23):
+- `make vps-new-mon` → hardened box, glances active on 127.0.0.1, no docker,
+  `ufw` allowing only the randomized SSH port.
+- `make vps-mon-setup` → `make mon-check` **from the box** reports
+  `Context: viewer`, tooling present, 1 app registered, `hetzner-vps-2`
+  reachable.
+- `make mon-apps` from the box: app healthy, 173ms total (vs ~250ms from Brazil
+  - see the threshold note below).
+- `make mon-hw` from the box: both boxes ONLINE in one TUI.
+- Rebuilding loses nothing (all data is on the app boxes).
+
+**Decision (locked): the mon box is CREDENTIAL-LESS.** Its generated `.env`
+carries `MON_*` tuning only - no Hetzner token, no Cloudflare keys. Reasoning:
+- It is the designed "viewer" context from B1. `mon_context` reports `viewer`,
+  so hardware targets come from the registry and apps are checked over public
+  URLs - exactly the credential-free path B0 was shaped around.
+- A stolen mon box then grants **no infrastructure access at all**. Putting a
+  Hetzner token on an always-on box to save a `hcloud` call would trade the
+  whole point of the design for a convenience.
+- **Known consequence, accepted:** a box with **no registered app** is invisible
+  from the mon box (it has no way to enumerate the fleet). It remains visible
+  from the laptop, which can ask Hetzner. The mon box always adds itself.
+
+**Decision (locked): the mon box GENERATES ITS OWN SSH KEY.** `vps-mon-setup`
+runs `ssh-keygen` *on the box*, carries only the **public** half back, and
+appends it to each app box's `authorized_keys`. The laptop's private key is
+never copied. Reasoning: user-data is retained by Hetzner and served by the
+metadata service, so it can never carry a key; and a disposable host should not
+hold a credential whose blast radius is the entire fleet. Revocation is dropping
+one line from each app box. The key is passphrase-less because the viewer must
+run unattended - bounded instead by being separately revocable.
+
+**Note - thresholds are a property of the observer:** the same healthy app
+measures ~250ms from Brazil and ~173ms from Helsinki. `vps-mon-setup` therefore
+writes **tighter** defaults into the mon box's `.env` (300/1000 ms) than the
+laptop's (1200/3000 ms). Do not copy one machine's numbers to another.
+
+**Note - the mon box holds a copy, not a checkout:** `vps-mon-setup` tars the
+viewer over SSH (`.git` and `.env` excluded by construction, not by cleanup).
+Re-run it after changing `mon/`, `config.sh`, `utils.sh`, or the registry. It
+rewrites the box's ssh config **in full**, so a destroyed-and-recreated app box
+leaves no stale entry.
 
 ---
 
@@ -609,6 +671,28 @@ for all my boxes' apps."*
   via `jq`, never via the litestream bucket read (which may fail).
 - Registry file (B0) = **gitignored**, shipped as `mon/registry.example.json`.
   Public repo; the live file holds client base URLs. Operator state, not source.
+- Glances bind (B2) = restated in **a systemd drop-in we own**, never inherited
+  from Ubuntu's packaging. The package happens to bind loopback already; that is
+  a packaging default, not a contract, and glances' own default is `0.0.0.0`.
+- Port mapping (B2) = remote port always 61209; the viewer allocates one local
+  port per box from `MON_GLANCES_LOCAL_PORT_BASE` upward, skipping ports in use.
+  Generated `glances.conf` is per-run and disposable; every entry is `localhost`
+  distinguished by port, box name carried in `server_N_alias`.
+- Viewer self-view (B2) = the host running `mon-hw` joins its own board via
+  127.0.0.1 with **no tunnel**, so the mon box is not the one unwatchable host.
+- Mon box (B3) = **credential-less**. `MON_*` tuning only, no Hetzner/Cloudflare
+  keys. Accepted consequence: app-less boxes are invisible from the mon box
+  (still visible from the laptop). A stolen mon box grants nothing.
+- Mon box key (B3) = **generated on the box**; only the public half travels, to
+  each app box's `authorized_keys`. The laptop key is never copied there - and
+  no key may ride in user-data, which Hetzner retains and the metadata service
+  serves. Revoke by dropping one line per app box.
+- Mon profiles (B3) = a **separate cloud-init template**, not conditionals in
+  the app one (cloud-init YAML has no conditionals). Hardening controls are kept
+  identical between the two; only workload runtime differs.
+- Latency thresholds = **a property of the observer, not the app**. ~250ms from
+  Brazil vs ~173ms from Helsinki for the same healthy app, so the mon box ships
+  tighter defaults than the laptop. Never copy one machine's numbers to another.
 
 ## ❓ Open questions to resolve before coding
 
@@ -617,8 +701,12 @@ for all my boxes' apps."*
    Decisions locked).
 2. ~~B2: glances server bind/auth (localhost+tunnel assumed).~~ **RESOLVED** →
    localhost bind + SSH tunnel, no glances password (see B2 + Decisions locked).
-   What remains in B2 is *not* a security question but a mechanical one: how the
-   viewer maps N boxes onto N distinct local ports and generates the
-   `glances.conf` server list from the registry.
+   The remaining mechanical half - port mapping and `glances.conf` generation -
+   is **also resolved and implemented**; see B2 and Decisions locked.
 3. ~~B4: public URL checks vs. tunnelled internal checks.~~ **RESOLVED** →
    public URL only; no credentials needed, so the board runs from anywhere.
+
+**SPRINT B is closed.** B0-B4 are all 🟢 and live-verified against
+`hetzner-vps-2` (app box) and `hetzner-mon-1` (mon box). Day-to-day usage is
+documented in `mon/OPERATING.md`, not here - this file records *why*, that one
+records *how*.

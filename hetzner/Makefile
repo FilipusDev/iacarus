@@ -7,11 +7,13 @@ include ../config.mk
 SHELL := /bin/bash
 
 PROVISION_SCRIPT         := ./vps-provision.sh
+MON_SETUP_SCRIPT         := ./vps-mon-setup.sh
 DESTROY_SCRIPT           := ./vps-destroy.sh
 LIST_SCRIPT              := ./vps-list.sh
 HEALTH_SCRIPT            := ./vps-health-check.sh
 STATS_SCRIPT             := ./vps-stats.sh
 STATS_ENABLE_SCRIPT      := ./vps-stats-enable.sh
+GLANCES_ENABLE_SCRIPT    := ./vps-glances-enable.sh
 DOCTOR_SCRIPT            := ./vps-doctor.sh
 SMOKE_SCRIPT             := ./vps-cf-tunnel-smoke_test.sh
 LITESTREAM_SCRIPT        := ./vps-litestream-add.sh
@@ -29,6 +31,12 @@ help: ## Show this help message
 vps-new:  ## Provision a new server
 	@$(PROVISION_SCRIPT)
 
+vps-new-mon: ## Provision a new stateless MON viewer box
+	@$(PROVISION_SCRIPT) --profile mon
+
+vps-mon-setup: ## Ship the viewer + link the mon box to the fleet (idempotent)
+	@$(MON_SETUP_SCRIPT)
+
 vps-down: ## Destroy a server (Interactive)
 	@$(DESTROY_SCRIPT)
 
@@ -40,6 +48,9 @@ vps-check-health: ## Run health check
 
 vps-stats: ## Read-only health stats (load + CPU/mem/disk/net windows)
 	@$(STATS_SCRIPT)
+
+vps-glances-enable: ## Enable the glances server on an older box (for mon-hw)
+	@$(GLANCES_ENABLE_SCRIPT)
 
 vps-stats-enable: ## Enable sysstat history on an older box (for vps-stats windows)
 	@$(STATS_ENABLE_SCRIPT)
@@ -65,4 +76,4 @@ vps-app-add: ## Orchestrate a client app: R2 buckets + 2 isolated scoped tokens 
 vps-app-remove: ## Decommission a client app: revoke both tokens + deregister Litestream
 	@$(APP_REMOVE_SCRIPT)
 
-.PHONY: help vps-new vps-down vps-list vps-check-health vps-stats vps-stats-enable vps-doctor vps-smoke-tunnel vps-litestream-add vps-litestream-remove vps-litestream-smoke vps-app-add vps-app-remove
+.PHONY: help vps-new vps-new-mon vps-mon-setup vps-down vps-list vps-check-health vps-stats vps-stats-enable vps-glances-enable vps-doctor vps-smoke-tunnel vps-litestream-add vps-litestream-remove vps-litestream-smoke vps-app-add vps-app-remove
