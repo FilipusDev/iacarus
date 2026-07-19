@@ -342,6 +342,15 @@ make mon-hw      # live fleet hardware board (glances over SSH tunnels)
 make mon-check   # what can this machine actually see?
 ```
 
+Every board also has a `mon-box-*` twin that runs it **on the always-on mon
+box** instead - same output, checked from a host that sits next to the fleet:
+
+```sh
+make mon-box-apps        # app board, from the mon box
+make mon-box-hw          # hardware board, from the mon box
+make mon-box-apps-once   # one pass, non-zero if anything is down (cron/CI)
+```
+
 **No web UIs, no time-series database, and no open ports.** Every glances server
 binds `127.0.0.1` and is reached exclusively over an SSH tunnel, so zero-ingress
 is a property of the process not listening rather than of a firewall rule.

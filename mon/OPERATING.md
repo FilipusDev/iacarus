@@ -9,18 +9,31 @@ code fork.
 
 ## The 30-second version
 
-```bash
-# From the mon box (always-on, sits next to the fleet):
-ssh hetzner-mon-1 -t 'cd /opt/iacarus/mon && make mon-apps'   # are the apps up?
-ssh hetzner-mon-1 -t 'cd /opt/iacarus/mon && make mon-hw'     # are the boxes ok?
+Everything runs from `mon/`. Targets come in pairs: **`mon-*`** runs the board
+*here*, **`mon-box-*`** runs the same board *on the mon box*.
 
-# From your laptop (identical targets, run inside mon/):
-make mon-apps
+```bash
+cd mon
+
+make mon-box-apps        # are the apps up?      (checked from the mon box)
+make mon-box-hw          # are the boxes ok?     (checked from the mon box)
+make mon-box-apps-once   # one pass, non-zero if anything is down (cron/CI)
+
+make mon-apps            # same boards, checked from HERE
 make mon-hw
+make mon-check           # what can this machine actually see?
 ```
 
-`-t` is not optional for `mon-hw`: it is a full-screen curses UI and needs a
-real terminal. Without it you get a clear error rather than a traceback.
+The `mon-box-*` targets resolve the box from your ssh config (any `Host`
+starting `hetzner-mon-`), handle the `ssh -t` pty dance, and **hand the remote
+exit code back** - so `mon-box-apps-once` is directly usable in a cron. Override
+the box with `MON_BOX=<alias> make mon-box-apps`. Run them *on* the mon box and
+they detect it and run locally instead of SSHing to themselves.
+
+**Which pair should you use?** `mon-box-*` is the honest one for "is my app up" -
+it checks continuously from a host that is always on, sitting next to the fleet.
+The local `mon-*` pair measures *your* path to the app, which is what you want
+when the question is "is it slow for me?".
 
 ---
 
@@ -32,7 +45,13 @@ real terminal. Without it you get a clear error rather than a traceback.
 | `make mon-list` | *What apps exist?* | nothing | `mon/registry.json` |
 | `make mon-apps` | *Are the apps up, and how slow?* | `curl` | public URLs |
 | `make mon-hw` | *Are the boxes healthy?* | `ssh` + `glances` | glances on each box |
+| `make mon-box-*` | *…same, asked from the mon box* | `ssh` | the mon box |
 | `make vps-stats` (hetzner/) | *What did ONE box do over 5m/15m/30m/1h?* | `ssh` | sar on that box |
+
+> **Local `mon-hw` needs glances on THIS machine** (`pacman -S glances` /
+> `apt install glances`). `mon-box-hw` does not - the box already has it. Note
+> Arch ships glances 4.x while the boxes run 3.4; a 4.x client against 3.x
+> servers is untested here, so `mon-box-hw` is the safer daily driver.
 
 `mon-apps` is the one you leave running. `mon-hw` is what you open when
 `mon-apps` goes yellow or red and you want to know *why*.
