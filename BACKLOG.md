@@ -221,7 +221,7 @@ change. (Option b, pinning box TZ, was dropped.)
 > Read the **North Star** above first. Viewer is stateless + portable; data lives
 > on the app boxes; Hybrid build (Glances for HW, home-grown sh for apps).
 
-### B0 🔴 Fleet inventory (shared by every mon target)
+### B0 🟢 Fleet inventory (shared by every mon target)
 
 **Why:** the viewer needs to know which boxes/apps exist. Avoid a hand-kept list
 that drifts.
@@ -289,6 +289,46 @@ sync the same way.
 - `vps-app-remove` still deregisters cleanly when the litestream bucket read
   fails (no orphaned registry entry).
 - The live registry is never committed; `mon/registry.example.json` is.
+
+**Delivered**
+- `config.sh`: `PROJECT_ROOT` (derived from the existing `.env` probe) +
+  `MON_REGISTRY`, so the path resolves identically from root or a domain dir.
+- `utils.sh`: `mon_registry_add` (upsert, keyed on slug), `mon_registry_remove`
+  (resolves by box+label, prints the slug, rc 1 on miss), `mon_registry_list`
+  (read path for B1/B4). Atomic sibling-temp + rename, since `jq` cannot read
+  and write one file in a single pass.
+- `vps-rails-app-add.sh`: step 4c prompts `health_path` (default `/up`) and
+  display `name` alongside the CORS prompt (all input up front); step 10b writes
+  the row **non-fatally** - the app is already live by then, so a bookkeeping
+  failure warns instead of triggering the token rollback.
+- `vps-rails-app-remove.sh`: step 10 drops the row, warning on a miss.
+- `.gitignore`: `mon/registry.json` + `mon/registry.json.*` (stray temps).
+
+**Verified** (isolated harness, 19 assertions, all pass): upsert doesn't
+duplicate; same label on two boxes coexists and removing one leaves the other;
+removal needs no SSH and no bucket read; miss returns 1 twice over (unknown box,
+right box + wrong label); list is sorted and empty-safe on a fresh clone; quotes
+and `&` in values round-trip as data; no temp files left behind.
+
+**Gotcha for B1/B4:** call `mon_registry_remove` in a condition
+(`if SLUG=$(...)`). A bare call trips the global `ERR` trap on the normal miss
+path and prints the "Script aborted!" panic block. Documented at the function.
+
+**Backfilled:** the one existing app, `ccg-2026-01-mpl-prd` (`mpl` on
+hetzner-vps-2, `https://mpl.filipus.dev.br/up`), added via `mon_registry_add`
+itself rather than by hand. Its facts were *derived*, not retyped: `base_url`
+from the upl bucket's live CORS policy (`get-bucket-cors`), `box` + `label` from
+`/etc/litestream.yml`, and `/up` confirmed answering 200. Removal was then
+dry-run against a copy - `(hetzner-vps-2, mpl)` resolves to the right slug.
+The registry is therefore no longer empty, and B4 has a real target on day one.
+
+**Not yet verified:** the end-to-end `make vps-app-add` / `vps-app-remove` runs,
+which would provision real Cloudflare + Hetzner resources. The helpers are now
+proven against both synthetic and real data, but the *call sites inside the two
+scripts* (steps 4c/10b and 10) have not executed - that needs one live app cycle.
+
+**Deferred to B1:** the `mon-register` backfill one-shot lands with the `mon/`
+Makefile rather than as a bare script with no control plane to hang off.
 
 ---
 
