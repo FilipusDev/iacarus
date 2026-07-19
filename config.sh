@@ -36,7 +36,9 @@ source "$ENV_FILE"
 # source: it carries client base URLs and is gitignored - `mon/registry.example.json`
 # is the committed shape reference. Resolved off PROJECT_ROOT so the path is
 # identical whether a script runs from the repo root or a domain dir.
-MON_REGISTRY="${PROJECT_ROOT}/mon/registry.json"
+# Overridable so a mon box can point at a registry kept outside the repo (and so
+# it can be exercised against a fixture) without editing anything.
+MON_REGISTRY="${MON_REGISTRY:-${PROJECT_ROOT}/mon/registry.json}"
 
 # --- SSH KEY CONFIG ---
 

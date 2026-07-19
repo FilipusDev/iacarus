@@ -332,7 +332,7 @@ Makefile rather than as a bare script with no control plane to hang off.
 
 ---
 
-### B1 🔴 `make mon` - the viewer entrypoint (local **or** mon box)
+### B1 🟢 `make mon` - the viewer entrypoint (local **or** mon box)
 
 **Why:** single command that opens the TUI, runnable from a laptop or the
 dedicated mon box unchanged (North Star).
@@ -346,7 +346,41 @@ dedicated mon box unchanged (North Star).
   combined view.
 
 **Acceptance**
-- Same repo, same command, works from laptop and from mon box.
+- Same repo, same command, works from laptop and from mon box. ✅
+
+**Delivered**
+- `mon/` domain dir + `mon/Makefile` (mirrors hetzner/cloudflare), root `make mon`
+  delegation, README control-plane block updated.
+- `utils.sh`: `mon_context()` → `operator` (hcloud answers, fleet discoverable)
+  or `viewer` (registry + ssh config only). Not a code fork - it bounds hardware
+  *discovery* (B2); app checks (B4) need neither, only curl + the registry.
+- `mon-check` - readiness report: context, tooling, registry, per-box SSH
+  reachability. Read-only. Exits 1 on missing tooling.
+- `mon-list` - offline registry table. No network, no ssh, no credentials.
+- `mon-register` - the B0 backfill, **deriving** rather than asking: `base_url`
+  from the upl bucket's live CORS policy, `label` from the box's
+  `/etc/litestream.yml` (offered as a menu, so a typo can't orphan the row
+  against `vps-app-remove`'s box+label lookup). Every derived value is an
+  overridable default; without creds each falls back to a prompt. Verifies the
+  health endpoint before writing.
+- `config.sh`: `MON_REGISTRY` is now overridable (`${MON_REGISTRY:-...}`) so a
+  mon box can point outside the repo and it can be run against a fixture.
+
+**Verified**
+- `operator` and `viewer` contexts both exercised (the latter by running with
+  `hcloud` hidden from `PATH`): same code, correct detection, and
+  `mon-register` produced a byte-identical row in both.
+- Degradation: absent registry, empty registry, and missing `jq` all handled -
+  the first two are normal states (exit 0, pointed at the fix), the third exits 1.
+- `mon-register` round-tripped the real `ccg-2026-01-mpl-prd` against a fixture,
+  reproducing the hand-built row exactly. Live registry untouched throughout.
+
+**Bug found + fixed while testing:** `ssh` forwards stdin to the remote command,
+so the un-`-n`'d calls ate the answers meant for later prompts. Two sites:
+`mon-register`'s label read (aborted outright), and `mon-check`'s reachability
+loop - where the loop's stdin *is* the box list, so it would have silently
+checked only the first box and skipped the rest. Latent on a one-box fleet.
+Both now use `ssh -n`, matching A1's discipline.
 
 ---
 
