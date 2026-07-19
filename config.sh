@@ -61,6 +61,18 @@ MON_HTTP_TIMEOUT="${MON_HTTP_TIMEOUT:-15}"
 # Warn when a TLS certificate expires within this many days.
 MON_TLS_WARN_DAYS="${MON_TLS_WARN_DAYS:-21}"
 
+# Hardware board (B2). The glances server on each box listens on LOOPBACK only,
+# so the viewer reaches every box through its own SSH tunnel - never an open
+# port. MON_GLANCES_PORT is the REMOTE port (the glances default, identical on
+# every box, since nothing else ever sees it). The viewer then allocates one
+# distinct LOCAL port per box starting at MON_GLANCES_LOCAL_PORT_BASE, skipping
+# anything already in use, and points glances' browser mode at those.
+MON_GLANCES_PORT="${MON_GLANCES_PORT:-61209}"
+MON_GLANCES_LOCAL_PORT_BASE="${MON_GLANCES_LOCAL_PORT_BASE:-61209}"
+
+# How long to wait for each SSH tunnel to start accepting connections.
+MON_TUNNEL_TIMEOUT="${MON_TUNNEL_TIMEOUT:-15}"
+
 # --- SSH KEY CONFIG ---
 
 SSH_PUBLIC_KEY_PATH=${SSH_PUBLIC_KEY_PATH}

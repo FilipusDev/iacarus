@@ -26,7 +26,7 @@ source config.sh
 
 # 2. Dependency Check
 echo -e "\n${C_INFO}🔍 Checking dependencies...${C_RESET}"
-DEPS=("hcloud" "aws" "make" "nc" "curl" "jq")
+DEPS=("hcloud" "aws" "make" "nc" "curl" "jq" "glances")
 MISSING=0
 
 for cmd in "${DEPS[@]}"; do
@@ -44,7 +44,7 @@ fi
 
 # 3. Directory Structure
 echo -e "\n${C_INFO}📂 Verifying project structure...${C_RESET}"
-chmod +x *.sh hetzner/*.sh cloudflare/*.sh 2>/dev/null || true
+chmod +x *.sh hetzner/*.sh cloudflare/*.sh mon/*.sh 2>/dev/null || true
 echo -e "${C_SUCCESS}✅ Made scripts executable.${C_RESET}"
 
 # 4. Instructions
