@@ -27,7 +27,6 @@ packages:
   - ncdu
   - curl
   - sysstat
-  - glances
 
 write_files:
   - path: /etc/ssh/sshd_config.d/hardening.conf
@@ -80,31 +79,6 @@ write_files:
       OnCalendar=
       OnCalendar=*:00/02
 
-  - path: /etc/systemd/system/glances.service.d/iacarus.conf
-    content: |
-      # IaCarus: pin the glances server to the LOOPBACK interface (SPRINT B2).
-      #
-      # Ubuntu 24.04's glances package happens to ship
-      # 'ExecStart=/usr/bin/glances -s -B 127.0.0.1' and enables the unit for
-      # us - but that is a PACKAGING DEFAULT, not a contract, and glances' own
-      # documented default bind is 0.0.0.0. We restate the bind in a drop-in we
-      # own so a package upgrade can never quietly expose the server: it reports
-      # the full process list, logged-in users and container names.
-      #
-      # Zero-ingress is then a property of the process NOT LISTENING publicly,
-      # with ufw as a second line of defence rather than the only one. Reach it
-      # from the viewer over an SSH tunnel ('make mon-hw'), never an open port.
-      # No glances password by design - the only party who can reach 127.0.0.1
-      # already holds a shell on the box, and SSH is the authenticator.
-      #
-      # The empty ExecStart= first clears the packaged value; without it systemd
-      # would APPEND ours and refuse to start with two ExecStart lines.
-      [Service]
-      ExecStart=
-      ExecStart=/usr/bin/glances -s -B 127.0.0.1
-      Restart=always
-      RestartSec=5
-
   - path: /etc/systemd/system/litestream.service
     content: |
       [Unit]
@@ -144,7 +118,6 @@ runcmd:
   - systemctl daemon-reload
   - systemctl enable --now sysstat-collect.timer
   - systemctl start sysstat-collect.service
-  - systemctl enable --now glances
   - ARCH=$(uname -m); if [ "$ARCH" = "x86_64" ]; then LS_ARCH="amd64"; else LS_ARCH="arm64"; fi; curl -L https://github.com/benbjohnson/litestream/releases/download/{{LITESTREAM_VERSION}}/litestream-{{LITESTREAM_VERSION}}-linux-${LS_ARCH}.tar.gz -o /tmp/litestream.tar.gz
   - tar -xzf /tmp/litestream.tar.gz -C /usr/local/bin/
   - rm /tmp/litestream.tar.gz

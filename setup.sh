@@ -26,7 +26,7 @@ source config.sh
 
 # 2. Dependency Check
 echo -e "\n${C_INFO}🔍 Checking dependencies...${C_RESET}"
-DEPS=("hcloud" "aws" "make" "nc" "curl" "jq" "glances")
+DEPS=("hcloud" "aws" "make" "nc" "curl" "jq")
 MISSING=0
 
 for cmd in "${DEPS[@]}"; do

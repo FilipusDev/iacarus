@@ -8,7 +8,7 @@ inspired by the "The One Person Framework" [article](https://world.hey.com/dhh/t
 Please read this `README` from top to bottom. (Yes, really 😅).
 If you prefer debugging for 2 hours to save 5 minutes of reading -> go to [TL;DR](#🦥-tldr).
 
-Currently (`v0.19.0`) it automates the provisioning of hardened **Hetzner VPS**
+Currently (`v0.20.0`) it automates the provisioning of hardened **Hetzner VPS**
 servers, and **Cloudflare R2** storage buckets using simple Bash scripts and Makefiles.
 
 ## 🗺️ TODO
@@ -55,7 +55,7 @@ tier - check the [Hetzner console](https://console.hetzner.cloud) for
 updated availability, since server types come and go over time.
 We're talking about a few bucks (USD) cheap. Per VPS!
 
-As of now (`v0.19.0`) you'll need 2 accounts: one for Hetzner and one for Cloudflare.
+As of now (`v0.20.0`) you'll need 2 accounts: one for Hetzner and one for Cloudflare.
 
 At Hetzner, we'll manage server boxes (VPS).
 At Cloudflare, we'll manage Zero Trust tunnels and R2 storage buckets.
@@ -114,10 +114,6 @@ During the process you might need to provide a payment method.
 5. **curl, jq:** used to talk to the Cloudflare API directly (token minting/
    revocation for the multi-tenant app orchestrator, `make vps-app-add` /
    `make vps-app-remove`).
-
-6. **glances:** the fleet hardware board (`make mon-hw`) drives it in browser
-   mode. Only needed on the **viewer** - the boxes get their own copy from
-   cloud-init. Install with `pacman -S glances` / `apt install glances`.
 
 ## 📝 Configuration
 
@@ -345,10 +341,8 @@ where it runs is a runtime choice, never a code fork.
 ```sh
 cd mon
 make mon-apps    # live app liveness + latency board (public URLs, no creds)
-make mon-hw      # live fleet hardware board (glances over SSH tunnels)
+make mon-board   # box + app time series, whole fleet on one screen
 make mon-check   # what can this machine actually see?
-
-make mon-glances-pin   # once per machine: pin glances to the fleet's version
 ```
 
 Every board also has a `mon-box-*` twin that runs it **on the always-on mon
@@ -356,13 +350,12 @@ box** instead - same output, checked from a host that sits next to the fleet:
 
 ```sh
 make mon-box-apps        # app board, from the mon box
-make mon-box-hw          # hardware board, from the mon box
 make mon-box-apps-once   # one pass, non-zero if anything is down (cron/CI)
 ```
 
-**No web UIs, no time-series database, and no open ports.** Every glances server
-binds `127.0.0.1` and is reached exclusively over an SSH tunnel, so zero-ingress
-is a property of the process not listening rather than of a firewall rule.
+**No web UIs, no time-series database, and no open ports.** Samples are written
+to plain rotated TSVs on each box and read over SSH, so the viewer holds no
+state and nothing new ever listens on a network interface.
 
 An optional always-on viewer host is one command away:
 

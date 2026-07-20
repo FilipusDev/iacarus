@@ -50,7 +50,6 @@ packages:
   - jq
   - make
   - sysstat
-  - glances
 
 write_files:
   - path: /etc/ssh/sshd_config.d/hardening.conf
@@ -84,24 +83,6 @@ write_files:
       OnCalendar=
       OnCalendar=*:00/02
 
-  - path: /etc/systemd/system/glances.service.d/iacarus.conf
-    content: |
-      # IaCarus: pin the glances server to LOOPBACK (SPRINT B2).
-      #
-      # The mon box runs the glances SERVER as well as the client, so the thing
-      # watching the fleet is itself watchable - if the viewer host is wedged,
-      # that is exactly when you want to see it. 'make mon-hw' run ON this box
-      # reads it straight off 127.0.0.1 with no tunnel; run from a laptop it is
-      # tunnelled like any other box.
-      #
-      # The empty ExecStart= first clears the packaged value; without it systemd
-      # would APPEND ours and refuse to start with two ExecStart lines.
-      [Service]
-      ExecStart=
-      ExecStart=/usr/bin/glances -s -B 127.0.0.1
-      Restart=always
-      RestartSec=5
-
 runcmd:
   - rm -f /etc/ssh/sshd_config.d/50-cloud-init.conf
   - ufw default deny incoming
@@ -115,4 +96,3 @@ runcmd:
   - systemctl daemon-reload
   - systemctl enable --now sysstat-collect.timer
   - systemctl start sysstat-collect.service
-  - systemctl enable --now glances

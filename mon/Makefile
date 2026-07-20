@@ -16,9 +16,8 @@ CHECK_SCRIPT    := ./mon-check.sh
 LIST_SCRIPT     := ./mon-list.sh
 REGISTER_SCRIPT := ./mon-register.sh
 APPS_SCRIPT     := ./mon-apps.sh
-HW_SCRIPT       := ./mon-hw.sh
 REMOTE_SCRIPT   := ./mon-remote.sh
-PIN_SCRIPT      := ./mon-glances-pin.sh
+BOARD_SCRIPT    := ./mon-board.sh
 
 help: ## Show this help message
 	@echo -e "\n$(C_HIGH)| 📡 MON | 🦅 IaCarus ${VERSION} - CONTROL PLANE$(C_RESET)"
@@ -35,11 +34,14 @@ mon-list: ## List the registered apps (offline - no network, no credentials)
 mon-register: ## Hand-register an existing app (backfill; derives what it can)
 	@$(REGISTER_SCRIPT)
 
-mon-hw: ## Live hardware board across the fleet (glances over SSH tunnels)
-	@$(HW_SCRIPT)
+mon-board: ## Box + app time series, whole fleet on one screen
+	@$(BOARD_SCRIPT)
 
-mon-glances-pin: ## Pin this viewer's glances to the fleet's version (venv; run once)
-	@$(PIN_SCRIPT)
+mon-board-watch: ## Same board, live with sparklines (Ctrl-C to stop)
+	@$(BOARD_SCRIPT) --watch
+
+mon-board-once: ## One pass over the board (non-zero if anything is down)
+	@$(BOARD_SCRIPT) --once
 
 mon-apps: ## Live app liveness + latency board (Ctrl-C to stop)
 	@$(APPS_SCRIPT)
@@ -51,13 +53,10 @@ mon-apps-once: ## One pass over the apps, then exit (non-zero if anything is dow
 # Identical output; the difference is WHERE the checks originate (next to the
 # fleet, not from your laptop). Latency figures will differ accordingly.
 
-mon-box-hw: ## Hardware board, run on the mon box
-	@$(REMOTE_SCRIPT) mon-hw
-
 mon-box-apps: ## App board, run on the mon box
 	@$(REMOTE_SCRIPT) mon-apps
 
 mon-box-apps-once: ## One app pass on the mon box (non-zero if anything is down)
 	@$(REMOTE_SCRIPT) mon-apps-once --no-tty
 
-.PHONY: help mon-check mon-list mon-register mon-hw mon-glances-pin mon-apps mon-apps-once mon-box-hw mon-box-apps mon-box-apps-once
+.PHONY: help mon-check mon-list mon-register mon-board mon-board-watch mon-board-once mon-apps mon-apps-once mon-box-apps mon-box-apps-once
