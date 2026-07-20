@@ -22,14 +22,23 @@ the workspace and never load its `CLAUDE.md`. Change one, change all.
 - **Never add a `Co-Authored-By` trailer.**
 - **Split by coherence.** One commit per coherent change (docs vs behavior), splitting a shared
   file by hunk (`git apply --cached`) rather than lumping them together.
-- **Merge with `--no-ff`** so every integration is a visible merge knot on `main`.
+- **Merge with `--no-ff`, keeping git's own subject:** `Merge branch '<topic>'`, nothing else. Every
+  integration is then a knot on `main` whose subject names the branch it closed. Restating a topic
+  commit's subject on its merge makes the log read as the same commit twice — the branch name is
+  the one thing the merge knows that its commits do not.
 - **Behavior-pure versioning.** Versions track what actually runs. Docs-only changes merge with no
   bump and no tag. Behavior changes get an isolated `chore: bump version to vX.Y.Z` commit *on the
   topic branch* (so the tagged tree carries its own version), then an annotated tag on the merge
-  commit. The tag subject is a clean headline with no version text inside it. **Minor** for a new
-  capability, **patch** for a bugfix.
+  commit. The tag subject is a clean lowercase headline with no version text inside it. **Minor**
+  for a new capability, **patch** for a bugfix.
+- **Every repo that *runs* is versioned.** The control plane and every app stamped from
+  `_template_rails-app` — the canary first — carry a version artifact and the rule above from their
+  first commit, so a deployed tree can always name itself. A repo that only *describes* carries
+  none, and says so in its repo-local rules rather than leaving it to be inferred.
 - **The remote is `gh`, never `origin`.** `git push gh main`, plus `git push gh vX.Y.Z` when tagged.
-- **Delete the topic branch** after merging.
+- **Close the branch in one sitting:** merge → tag, if behavior changed → `git push gh main` and the
+  tag → delete the topic branch. A branch left merged-but-unpushed, or a bump left untagged, is
+  exactly the drift the rest of this protocol exists to prevent.
 
 ### Working rules
 
