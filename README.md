@@ -115,10 +115,6 @@ During the process you might need to provide a payment method.
    revocation for the multi-tenant app orchestrator, `make vps-app-add` /
    `make vps-app-remove`).
 
-6. **glances:** the fleet hardware board (`make mon-hw`) drives it in browser
-   mode. Only needed on the **viewer** - the boxes get their own copy from
-   cloud-init. Install with `pacman -S glances` / `apt install glances`.
-
 ## 📝 Configuration
 
 Copy `.env.example` to `.env`. Public configuration (SSH paths, VPS profile, account id) is
@@ -345,10 +341,7 @@ where it runs is a runtime choice, never a code fork.
 ```sh
 cd mon
 make mon-apps    # live app liveness + latency board (public URLs, no creds)
-make mon-hw      # live fleet hardware board (glances over SSH tunnels)
 make mon-check   # what can this machine actually see?
-
-make mon-glances-pin   # once per machine: pin glances to the fleet's version
 ```
 
 Every board also has a `mon-box-*` twin that runs it **on the always-on mon
@@ -356,13 +349,12 @@ box** instead - same output, checked from a host that sits next to the fleet:
 
 ```sh
 make mon-box-apps        # app board, from the mon box
-make mon-box-hw          # hardware board, from the mon box
 make mon-box-apps-once   # one pass, non-zero if anything is down (cron/CI)
 ```
 
-**No web UIs, no time-series database, and no open ports.** Every glances server
-binds `127.0.0.1` and is reached exclusively over an SSH tunnel, so zero-ingress
-is a property of the process not listening rather than of a firewall rule.
+**No web UIs, no time-series database, and no open ports.** Samples are written
+to plain rotated TSVs on each box and read over SSH, so the viewer holds no
+state and nothing new ever listens on a network interface.
 
 An optional always-on viewer host is one command away:
 

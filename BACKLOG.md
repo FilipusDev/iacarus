@@ -18,7 +18,7 @@ Legend: 🔴 not started · 🟡 in progress · 🟢 done
 
 ---
 
-## 🧭 North Star (SPRINT B architecture)
+## 🧭 North Star (revised by SPRINT C)
 
 **Monitoring data lives on the app boxes; the "MON box" is a stateless viewer.**
 
@@ -30,17 +30,21 @@ thin, portable **client** that SSHes into the fleet and renders. Consequence:
 > different host. We build the viewer once; where it runs is a runtime choice,
 > never a code fork.
 
-Build philosophy: **Hybrid.**
+Build philosophy: **home-grown, end to end.**
 
-- **Hardware** → a ready-made tool (**Glances** in central/browser mode) because
-  a live multi-box metrics TUI is a solved problem and reinventing it in sh would
-  be worse and huge.
-- **Apps** → **home-grown sh/curl TUI**, because liveness/latency/speed checks
-  are trivial, our style wins here, and every ready-made option (gatus,
-  uptime-kuma, Netdata…) is a web dashboard - exactly the "Grafana crap" we're
-  avoiding.
+- **Hardware** → sampled by our own collector from `/proc`, on the box. SPRINT B
+  bet the other way (Glances in browser mode, "a solved problem"), and the bet
+  failed twice: the viewer could not talk to the boxes across a major version
+  boundary, and once matched, the *server* returned
+  `AttributeError: 'dict' object has no attribute 'is_enabled'` from
+  `getAllPlugins` - a structural bug in a Python dependency we do not control.
+  See SPRINT C.
+- **Apps** → **home-grown sh/curl**, because liveness/latency/speed checks are
+  trivial, our style wins here, and every ready-made option (gatus, uptime-kuma,
+  Netdata…) is a web dashboard - exactly the "Grafana crap" we're avoiding.
 
-No web UIs. No time-series database. `ssh mon` (or run local) → nice TUI. Done.
+No web UIs. No time-series database. **No Python on a box.** Samples are plain
+rotated TSVs; the viewer reads them over SSH and holds nothing.
 
 ---
 
@@ -385,7 +389,15 @@ Both now use `ssh -n`, matching A1's discipline.
 
 ---
 
-### B2 🟢 Hardware near-online - Glances central/browser
+### B2 ⬛ Hardware near-online - Glances central/browser — **SUPERSEDED by SPRINT C**
+
+> **Removed in C0.** Kept here for the reasoning trail, not as a description of
+> anything that exists. Glances is gone from the fleet: the client refuses a
+> major version mismatch and renders the refusal as an indistinguishable
+> `OFFLINE` row, and its server crashes `getAllPlugins` because `stats.py`
+> declares `_plugins = collections.defaultdict(dict)`, so a plugin that never
+> loads becomes `{}` instead of an error. Replaced by the on-box collector and
+> the `mon-board` reader.
 
 **Why:** live multi-box CPU/mem/disk/net TUI matching `MON → APP 1/APP 2`,
 reusing SPRINT A's on-box data where sensible.
@@ -394,9 +406,9 @@ reusing SPRINT A's on-box data where sensible.
 - **On each app box:** `glances` added to `packages:` in
   `hetzner/vps-user_data.yml.template`, plus a
   `glances.service.d/iacarus.conf` drop-in and `systemctl enable --now glances`
-  in `runcmd`. Backfill for existing boxes: `make vps-glances-enable`
+  in `runcmd`. Backfill for existing boxes: the `vps-glances-enable` target
   (`hetzner/vps-glances-enable.sh`), idempotent, mirroring `vps-stats-enable`.
-- **On the viewer:** `make mon-hw` (`mon/mon-hw.sh`) - one SSH tunnel per box
+- **On the viewer:** the `mon-hw` target (`mon/mon-hw.sh`) - one SSH tunnel per box
   onto a distinct local port, a generated throwaway `glances.conf`
   `[serverlist]`, then `glances --browser`. Tunnels are torn down on exit by a
   trap registered *before* the first one opens.
@@ -404,7 +416,7 @@ reusing SPRINT A's on-box data where sensible.
   `<public-ip>:61209` is refused on both the app box and the mon box.
 
 **Acceptance (met)**
-- `make mon-hw` → one TUI, `2 Glances servers available`, both `ONLINE`, live
+- the `mon-hw` target → one TUI, `2 Glances servers available`, both `ONLINE`, live
   LOAD/CPU%/MEM% updating across redraws, `ENTER` drills into a box.
 - No new inbound firewall rules; `ufw` still allows only the randomized SSH port.
 
@@ -431,7 +443,7 @@ that nothing creates). Without this the mon box - the one host whose health you
 cannot check from anywhere else - would never appear on its own board.
 
 **Bug caught by live testing (fixed):** `glances --browser` is a curses UI, so a
-non-interactive `ssh host make mon-hw` (no `-t`) arrives with `TERM` empty and
+non-interactive `ssh host the `mon-hw` target` (no `-t`) arrives with `TERM` empty and
 dies inside `curses.initscr()`, dumping a Python traceback. `mon-hw` now checks
 `TERM` **before opening any tunnel** and prints the `ssh -t` form instead. The
 `glances` call is also `|| true`-guarded so an unusual quit path can't reach the
@@ -469,7 +481,7 @@ a laptop. Optional - the viewer already runs locally (B1).
   reachable.
 - `make mon-apps` from the box: app healthy, 173ms total (vs ~250ms from Brazil
   - see the threshold note below).
-- `make mon-hw` from the box: both boxes ONLINE in one TUI.
+- the `mon-hw` target from the box: both boxes ONLINE in one TUI.
 - Rebuilding loses nothing (all data is on the app boxes).
 
 **Decision (locked): the mon box is CREDENTIAL-LESS.** Its generated `.env`
@@ -707,6 +719,25 @@ still not reach 30s cleanly.
 - `make doctor` green with no glances references anywhere.
 - No box has a listener on `61209`; no box has Python installed for our sake.
 - `~/.local/share/iacarus/glances-*` removed from the viewer.
+
+**Box-side migration (run once per existing box, by hand).** Deliberately *not*
+scripted: it is a one-time migration, and a permanent `vps-glances-remove.sh`
+would be dead weight the moment it had run everywhere. Deliberately not run
+automatically either - it stops a service and purges a package on live
+infrastructure.
+
+```bash
+ssh <box> 'sudo systemctl disable --now glances \
+  && sudo rm -rf /etc/systemd/system/glances.service.d \
+  && sudo systemctl daemon-reload \
+  && sudo DEBIAN_FRONTEND=noninteractive apt-get purge -y glances \
+  && sudo apt-get autoremove -y'
+
+# verify: nothing listening, package gone
+ssh <box> 'ss -tln | grep 61209 || echo "61209 clear"; command -v glances || echo "glances gone"'
+```
+
+Fresh boxes need none of this - the cloud-init profile no longer installs it.
 
 > Reverts `v0.19.0` (the viewer pin) and most of B2. Deliberate: the pin was the
 > right fix for the wrong dependency.

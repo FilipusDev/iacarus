@@ -10,18 +10,6 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/palette.sh"
 
 LITESTREAM_VERSION="v0.3.13"
 
-# glances speaks a client/server protocol that refuses to cross a MAJOR version
-# boundary, so the viewer and every box must agree - and "whatever each distro
-# packages" is not agreement. Ubuntu 24.04 ships exactly this build, which is
-# why the boxes can keep using apt; a rolling-release viewer cannot, and pins
-# itself to the same value with 'make mon-glances-pin'.
-GLANCES_VERSION="3.4.0.3"
-
-# Where that pinned viewer build lives. Outside the repo (it is a build artifact
-# of the operator's machine, not source), and keyed by version so changing the
-# pin above creates a NEW venv instead of silently reusing the old one.
-MON_GLANCES_VENV="${MON_GLANCES_VENV:-${HOME}/.local/share/iacarus/glances-${GLANCES_VERSION}}"
-
 # --- SOURCE ENV FILE ---
 
 # 1. Determine the Project Root (Where .env lives)
@@ -105,17 +93,34 @@ MON_HTTP_TIMEOUT="${MON_HTTP_TIMEOUT:-15}"
 # Warn when a TLS certificate expires within this many days.
 MON_TLS_WARN_DAYS="${MON_TLS_WARN_DAYS:-21}"
 
-# Hardware board (B2). The glances server on each box listens on LOOPBACK only,
-# so the viewer reaches every box through its own SSH tunnel - never an open
-# port. MON_GLANCES_PORT is the REMOTE port (the glances default, identical on
-# every box, since nothing else ever sees it). The viewer then allocates one
-# distinct LOCAL port per box starting at MON_GLANCES_LOCAL_PORT_BASE, skipping
-# anything already in use, and points glances' browser mode at those.
-MON_GLANCES_PORT="${MON_GLANCES_PORT:-61209}"
-MON_GLANCES_LOCAL_PORT_BASE="${MON_GLANCES_LOCAL_PORT_BASE:-61209}"
+# --- BOARD (SPRINT C) ---
 
-# How long to wait for each SSH tunnel to start accepting connections.
-MON_TUNNEL_TIMEOUT="${MON_TUNNEL_TIMEOUT:-15}"
+# Where the on-box collector writes. Two files, two fixed schemas - mixing
+# record shapes in one file is what makes a TSV unreadable six months later.
+MON_COLLECT_DIR="${MON_COLLECT_DIR:-/var/log/iacarus}"
+
+# Sample cadence, in seconds. Drives the systemd timer the collector installs.
+# 30s catches a short outage that a 60s tick would straddle; the cost is double
+# the write volume, which at ~4 MB per 7 days for three apps is not a cost.
+MON_COLLECT_INTERVAL="${MON_COLLECT_INTERVAL:-30}"
+
+# Days of samples kept on the box before logrotate discards them.
+MON_COLLECT_RETAIN_DAYS="${MON_COLLECT_RETAIN_DAYS:-7}"
+
+# Health endpoint probed on each app. Every app is stamped from
+# _template_rails-app, which serves Rails 8's default '/up', so convention
+# carries this. A box with an app that differs overrides it per-app in
+# /etc/iacarus/collect.conf rather than changing the fleet default.
+MON_COLLECT_HEALTH_PATH="${MON_COLLECT_HEALTH_PATH:-/up}"
+
+# Seconds before the collector abandons a health probe. Must stay well under
+# MON_COLLECT_INTERVAL: a probe that outlives the tick would let systemd skip
+# the next run, silently halving the sample rate.
+MON_COLLECT_TIMEOUT="${MON_COLLECT_TIMEOUT:-5}"
+
+# Windows the board averages over, in minutes. Mirrors vps-stats so the two
+# read alike.
+MON_BOARD_WINDOWS="${MON_BOARD_WINDOWS:-5 15 60 1440}"
 
 # Name prefix for MON boxes (B3), kept distinct from VPS_BASE_NAME so the two
 # profiles number independently and a mon box is identifiable at a glance in

@@ -318,48 +318,6 @@ Enter number (or 'q' to quit): 1
 ✅ Done.
 ```
 
-### make vps-glances-enable
-
-`make vps-glances-enable` retrofits the **glances server** onto a box provisioned
-**before** SPRINT B, so it shows up on the fleet hardware board (`make mon-hw`).
-Fresh boxes (`make vps-new`) get it from cloud-init - the same split as
-`make vps-stats-enable`.
-
-It's idempotent: it installs `glances` if missing, pins the server to
-`127.0.0.1` via a systemd drop-in, and restarts it. **No firewall port is
-opened** - the viewer reaches it over an SSH tunnel.
-
-> **Why pin a bind Ubuntu already sets?** The 24.04 package happens to ship
-> `glances -s -B 127.0.0.1` and enables it for you. That's a *packaging
-> default*, not a contract - glances' own documented default is `0.0.0.0`, and
-> the server reports the full process list, logged-in users and container names.
-> The drop-in makes the loopback bind **ours**, so an upgrade can't quietly
-> expose it. There's no glances password on purpose: whoever can reach
-> `127.0.0.1` already holds a shell on the box, and SSH is the authenticator.
-
-The script **refuses to report success** unless it can see the server listening
-on loopback and nothing else.
-
-```sh
-iacarus/hetzner main ❯ make vps-glances-enable
-
-🔍 Fetching server list from Hetzner...
-Select a server:
-1) ***527010:hetzner-vps-2:<IPv4-IP>:running
-Enter number (or 'q' to quit): 1
-
-🔌 Testing connection to hetzner-vps-2... OK
-
-📈 Enabling the glances server on hetzner-vps-2...
-----------------------------------------
-✅ glances already installed.
-✅ glances server listening on 127.0.0.1:61209 (loopback only).
-   Reach it with 'make mon-hw' - it opens the SSH tunnel for you.
-
-----------------------------------------
-✅ Done.
-```
-
 ### make vps-new-mon
 
 `make vps-new-mon` provisions a **MON box**: an always-on host for the stateless
@@ -368,8 +326,8 @@ observability viewer. Same `vps-new` flow, different cloud-init profile
 
 It gets **every hardening control the app profile has** - SSH lockdown, ufw
 default-deny, fail2ban, unattended-upgrades - and none of the workload runtime
-(no docker, no litestream). It adds the viewer's tooling instead: glances, curl,
-jq, make, git.
+(no docker, no litestream). It adds the viewer's tooling instead: curl, jq,
+make, git.
 
 The box holds **no monitoring data** (that lives on the app boxes), so it is
 disposable by design: destroy and rebuild it freely.
