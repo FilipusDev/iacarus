@@ -603,6 +603,218 @@ belong per-viewer (or per-app in the registry), not as one global pair.
 
 ---
 
+## 🅲 SPRINT C - one board: box + app time series, on the box
+
+**Why:** SPRINT B2 bet on glances for hardware. That bet failed twice in one
+sitting: the viewer could not talk to the boxes at all (glances refuses a MAJOR
+version mismatch, and renders the refusal as a bare `OFFLINE` row), and once
+pinned to matching versions the *server* returned
+`AttributeError: 'dict' object has no attribute 'is_enabled'` from
+`getAllPlugins`. The cause is upstream and structural: `stats.py` declares
+`self._plugins = collections.defaultdict(dict)`, so a plugin that never loads
+becomes an empty `{}` rather than an error, and the plugin list then calls
+`.is_enabled()` on a dict. That is a bug in a Python dependency we do not
+control, inside a fleet that otherwise runs on bash + coreutils.
+
+The replacement is smaller than it sounds. `vps-stats` already reads real
+hardware history off the box via `sar`, parsed by `lib-stats.sh` in pure
+bash/awk. `mon-apps` already probes app liveness and latency in pure sh + curl.
+Neither stores app data, and nothing joins them. **SPRINT C stores the app half
+on the box and renders both halves as one board.**
+
+Shape, per the ratified answers below:
+
+```
+viewer (laptop OR mon box)  ->  vps-1  ->  app1, app2, app3
+                            ->  vps-2  ->  app4
+```
+
+The box is the store. The viewer is thin and holds nothing.
+
+### Decisions locked (ratified 2026-07-20, do not relitigate)
+
+| Decision | Choice |
+|---|---|
+| Collection point | **On the box**, probing via kamal-proxy on loopback |
+| Public-path check | **Kept separately** - `mon-apps` still probes the public URL from the viewer |
+| Storage | **Append-only TSV + logrotate** - no database, no daemon beyond a timer |
+| App metrics | state + HTTP code, latency ms, container CPU% + mem, restarts + uptime |
+| Cadence | **30s sample, 7 day retention**, rotated daily + compressed |
+| Rendering | **One-shot table by default**, `--watch` for the live sparkline view |
+| Multi-box | **All boxes on one screen**, `--box <name>` narrows |
+| App discovery | **`kamal-proxy list`** on the box - zero config, auto-appears on deploy |
+| Hardware sampling | **The collector reads `/proc` itself** on the same 30s tick; `sar` untouched |
+| glances | **Removed entirely** - no Python anywhere on a box |
+
+> **Why the public check survives.** On-box probing answers *"is the app
+> healthy?"*. It cannot answer *"can the world reach it?"* - an app can be
+> perfectly green on loopback while DNS, Cloudflare or the tunnel is broken.
+> Two signals, two questions; collapsing them would lose the outage we most
+> want to catch.
+
+### Hardware sampling - why the collector reads `/proc` rather than `sar`
+
+`sar` samples every **2 minutes** (the `sysstat-collect.timer.d` drop-in from
+A0), but the app series samples every **30 seconds**. Rendering both in one
+table would put two resolutions in adjacent rows - a 30s app spike sitting
+beside a hardware number that is a 2-minute average. That is the kind of quiet
+mismatch that makes a board untrustworthy without ever looking wrong.
+
+**Ratified: the collector samples hardware itself, on the same 30s tick, into
+its own TSV.** CPU from `/proc/stat` deltas, memory from `/proc/meminfo`, disk
+from `df`, load from `/proc/loadavg` - pure bash, no new package, no daemon.
+
+`sar`, `vps-stats` and `vps-stats-enable` are **left exactly as they are**. They
+keep serving the long historical windows they were built for, and `vps-stats`
+stays the per-box deep-dive. The two coexist by answering different questions at
+different resolutions, which is honest, rather than by sharing one store at a
+resolution that suits neither.
+
+The rejected alternative - reconfiguring sysstat to sample faster - would couple
+this board to a package's timer layout, degrade `vps-stats`'s own windows, and
+still not reach 30s cleanly.
+
+> **Implementation note for C1.** CPU percentage needs *two* reads of
+> `/proc/stat` separated in time; a single read gives cumulative jiffies since
+> boot, not a rate. Each 30s run is a fresh process, so the collector must
+> persist the previous counters (e.g. `/var/lib/iacarus/prev-stat`) and diff
+> against them. The first run after boot has no predecessor and must emit `-`
+> rather than a fabricated `0`.
+
+### C0 🔴 Demolition - remove glances from the fleet
+
+**Scope**
+- Delete `mon/mon-hw.sh`, `mon/mon-glances-pin.sh`, `hetzner/vps-glances-enable.sh`.
+- Remove the `mon-hw`, `mon-glances-pin` and `mon-box-hw` Make targets.
+- Remove the glances block from `vps-user_data.yml.template`.
+- Remove `GLANCES_VERSION` + `MON_GLANCES_VENV` from `config.sh`, and
+  `MON_GLANCES_PORT` / `MON_GLANCES_LOCAL_PORT_BASE` / `MON_TUNNEL_TIMEOUT` if
+  nothing else claims them.
+- Drop the `glances` row from `fleet-versions.tsv` and the dependency bullet
+  from `README.md` + root `CLAUDE.md` (the doctor asserts these two lists match
+  `setup.sh` - update all three together or it goes red).
+- Stop and disable `glances.service` on every existing box, remove the
+  `/etc/systemd/system/glances.service.d/iacarus.conf` drop-in, `apt purge`.
+- Mark B2 superseded, pointing here.
+- **Rewrite the North Star** at the top of this file. It currently ratifies the
+  hybrid bet - "Hardware → a ready-made tool (Glances)… because reinventing it
+  in sh would be worse and huge". SPRINT C overturns exactly that clause, and a
+  planning ledger whose header contradicts its newest sprint is worse than one
+  that is merely out of date. The "no web UIs, no time-series database, monitoring
+  data lives on the app boxes" half stands and gets stronger.
+
+**Acceptance**
+- `make doctor` green with no glances references anywhere.
+- No box has a listener on `61209`; no box has Python installed for our sake.
+- `~/.local/share/iacarus/glances-*` removed from the viewer.
+
+> Reverts `v0.19.0` (the viewer pin) and most of B2. Deliberate: the pin was the
+> right fix for the wrong dependency.
+
+### C1 🔴 On-box collector - `iacarus-collect`
+
+**Scope**
+- `/usr/local/bin/iacarus-collect`, pure bash + coreutils + curl + docker CLI.
+- Driven by a **systemd timer** (`OnUnitActiveSec=30s`, `AccuracySec=1s`) with a
+  `Type=oneshot` service, so systemd will not start a second run while one is
+  still going - the natural guard against a hung probe piling up.
+- **Discovery:** parse `kamal-proxy list` for `Service`, `Host`, `Target`.
+  New apps appear on deploy; removed apps vanish. No file to keep in sync.
+- **App probe:** one curl per app through the proxy on loopback, which exercises
+  proxy + app and survives redeploys (the container IP changes every deploy, the
+  Host header does not):
+  ```
+  curl -o /dev/null -s -w '%{http_code} %{time_starttransfer}' \
+       -H "Host: <host>" --max-time 5 http://127.0.0.1/<health_path>
+  ```
+- **Container stats:** ONE `docker stats --no-stream` call for all containers,
+  never one per app - it is the most expensive thing in the loop.
+- **Restarts + uptime:** `docker inspect --format '{{.RestartCount}} {{.State.StartedAt}}'`.
+- **Two files, two fixed schemas** - mixing record shapes in one file is what
+  makes a TSV unreadable later:
+  ```
+  /var/log/iacarus/box.tsv    ts  cpu_pct  mem_pct  disk_pct  load1
+  /var/log/iacarus/apps.tsv   ts  app  state  code  ms  cpu_pct  mem_mb  restarts  uptime_s
+  ```
+- `/etc/logrotate.d/iacarus`: daily, `rotate 7`, `compress`, `missingok`,
+  `notifempty`. Plain rotation is safe because each run opens, appends and
+  closes - no long-lived descriptor, so no `copytruncate` needed.
+- Installed by cloud-init on new boxes, plus a `vps-collect-enable` target as the
+  backfill path for existing ones - the same split `vps-stats-enable` already
+  uses.
+
+**Acceptance**
+- Timer active; both TSVs growing at 30s.
+- A stopped app records `state=down`, and the collector still completes.
+- An app whose health endpoint hangs is cut off at `--max-time` and does not
+  delay the next tick.
+- Disk cost measured and recorded here (projection: ~4 MB for 3 apps over 7d).
+
+### C2 🔴 The board - the `mon-board` target (one-shot)
+
+**Scope**
+- `mon/mon-board.sh`, one SSH per box, boxes fanned out in parallel with `wait`
+  (B4's known tradeoff was sequential probing; do not repeat it).
+- **Aggregate on the box, not on the viewer.** The remote payload is an awk
+  program that reduces the TSVs to windowed averages and returns a few lines.
+  Shipping raw TSVs over SSH would move megabytes to compute an average.
+- Same remote-payload pattern `lib-stats.sh` already uses - concatenated ahead
+  of the ssh heredoc - so there is one idiom for on-box computation, not two.
+- Windows: **5m / 15m / 1h / 24h**, matching `vps-stats` so the two read alike.
+- Box selection follows `mon_context` exactly as B1 does: operator asks Hetzner,
+  viewer reads the registry.
+- Exits **non-zero if any app is down**, like `mon-apps-once`, so SPRINT C
+  alerting can call it directly.
+
+**Acceptance**
+- `mon-board` prints every box with its apps nested, in one screen.
+- `--box <name>` narrows; `--once` is the scriptable form.
+- A box that is unreachable is rendered as unreachable and does not abort the
+  board - the B2 lesson, kept.
+
+### C3 🔴 `--watch` - live view with sparklines
+
+**Scope**
+- Redraw by homing the cursor and clearing to end of screen, never `clear`
+  (no flicker, scrollback survives) - `mon-apps.sh` already proved this.
+- ASCII sparklines from the last N samples, bucketed into `▁▂▃▄▅▆▇█` in pure
+  bash. No curses, no framework, no TUI library.
+- Hide the cursor during the loop; restore it from an INT/TERM trap.
+
+**Acceptance**
+- `mon-board-watch` refreshes without flicker and restores the terminal on
+  Ctrl-C, including after a mid-refresh interrupt.
+
+### C4 🔴 Docs + doctor
+
+**Scope**
+- Rewrite `mon/OPERATING.md` around the new board; delete the glances sections.
+- `README.md` + root `CLAUDE.md`: drop glances, describe `mon-board`.
+- Add `mon-board` to the capability table with its question
+  (*"what have these boxes and apps been doing?"*).
+- Consider a doctor invariant: every registered app is present in its box's
+  `kamal-proxy list`, catching an app that was deployed but never registered.
+
+**Acceptance**
+- `make doctor` green, including the make-target and dependency-gloss checks.
+
+### Risks + tradeoffs to carry into C1
+
+- **`docker stats --no-stream` is slow** (~1s+, it samples a window internally).
+  One call for all containers keeps the duty cycle near 3% at 30s. If it grows,
+  drop container stats to every 4th tick rather than lengthening the whole loop.
+- **30s was chosen over 60s deliberately** - it catches short outages, at double
+  the write volume. Revisit if a box ever runs many apps.
+- **Discovery is coupled to kamal-proxy.** An app not fronted by it is invisible
+  to the collector. True of nothing today; it would become a real gap the first
+  time a non-Kamal service is deployed, and the fallback is the box-local config
+  file rejected above.
+- **Two probe paths can disagree** - on-box green while the viewer's public
+  check is red. That is the design working, and the board should render that
+  distinction obviously rather than reconciling them.
+
+---
+
 ## 🧊 Parked - SPRINT C / D sketches (NOT ratified)
 
 > Captured so they stop floating around. **Nothing here is a decision.** These
