@@ -643,6 +643,7 @@ The box is the store. The viewer is thin and holds nothing.
 | Rendering | **One-shot table by default**, `--watch` for the live sparkline view |
 | Multi-box | **All boxes on one screen**, `--box <name>` narrows |
 | App discovery | **`kamal-proxy list`** on the box - zero config, auto-appears on deploy |
+| Hardware sampling | **The collector reads `/proc` itself** on the same 30s tick; `sar` untouched |
 | glances | **Removed entirely** - no Python anywhere on a box |
 
 > **Why the public check survives.** On-box probing answers *"is the app
@@ -651,23 +652,34 @@ The box is the store. The viewer is thin and holds nothing.
 > Two signals, two questions; collapsing them would lose the outage we most
 > want to catch.
 
-### ⚠️ One decision still open - hardware sampling resolution
+### Hardware sampling - why the collector reads `/proc` rather than `sar`
 
-`sar` collects every **10 minutes** (Ubuntu's sysstat default), but the app
-series samples every **30 seconds**. Rendering both in one table means two
-resolutions in adjacent rows, where a 30s app spike sits beside a hardware
-number that is a 10-minute average.
+`sar` samples every **2 minutes** (the `sysstat-collect.timer.d` drop-in from
+A0), but the app series samples every **30 seconds**. Rendering both in one
+table would put two resolutions in adjacent rows - a 30s app spike sitting
+beside a hardware number that is a 2-minute average. That is the kind of quiet
+mismatch that makes a board untrustworthy without ever looking wrong.
 
-**Recommendation: the collector samples hardware itself, on the same 30s tick,
-into its own TSV.** CPU from `/proc/stat` deltas, memory from `/proc/meminfo`,
-disk from `df` - all pure bash, no new package. `sar`, `vps-stats` and
-`vps-stats-enable` stay exactly as they are, serving the longer historical
-windows they were built for. One board, one cadence, one story; `vps-stats`
-remains the deep-dive.
+**Ratified: the collector samples hardware itself, on the same 30s tick, into
+its own TSV.** CPU from `/proc/stat` deltas, memory from `/proc/meminfo`, disk
+from `df`, load from `/proc/loadavg` - pure bash, no new package, no daemon.
 
-The alternative - reconfiguring sysstat to sample faster - couples the new board
-to a package's cron layout and still cannot reach 30s cleanly. Not recommended,
-but it is the call to make before C1 starts.
+`sar`, `vps-stats` and `vps-stats-enable` are **left exactly as they are**. They
+keep serving the long historical windows they were built for, and `vps-stats`
+stays the per-box deep-dive. The two coexist by answering different questions at
+different resolutions, which is honest, rather than by sharing one store at a
+resolution that suits neither.
+
+The rejected alternative - reconfiguring sysstat to sample faster - would couple
+this board to a package's timer layout, degrade `vps-stats`'s own windows, and
+still not reach 30s cleanly.
+
+> **Implementation note for C1.** CPU percentage needs *two* reads of
+> `/proc/stat` separated in time; a single read gives cumulative jiffies since
+> boot, not a rate. Each 30s run is a fresh process, so the collector must
+> persist the previous counters (e.g. `/var/lib/iacarus/prev-stat`) and diff
+> against them. The first run after boot has no predecessor and must emit `-`
+> rather than a fabricated `0`.
 
 ### C0 🔴 Demolition - remove glances from the fleet
 
