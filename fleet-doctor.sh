@@ -176,7 +176,47 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# 6. Pinned versions — reminders only, never fatal
+# 6. setup.sh's DEPS array is restated in prose — every copy must match it
+# -----------------------------------------------------------------------------
+# setup.sh is what actually checks; the docs only describe. When they disagree, a reader installs
+# the wrong set and `make setup` fails on a tool no doc mentioned — which is how `make` and
+# `glances` went missing from the root CLAUDE.md list for two releases.
+#
+# The two restatement sites are named explicitly because they are structurally different: one is a
+# parenthesised inline list, the other a numbered section with comma-grouped bold headers. A generic
+# extractor would match neither reliably, so each gets its own two-line parser.
+echo -e "\n${C_HIGH}▶ Dependency list${C_RESET}"
+norm() { tr ',' '\n' | tr -d ' `*' | grep -v '^$' | sort -u; }
+declared_deps="$(sed -nE 's/^DEPS=\((.*)\)/\1/p' "${SCRIPT_DIR}/setup.sh" | tr -d '"' | tr ' ' ',' | norm)"
+if [ -z "$declared_deps" ]; then
+  fail "setup.sh declares no DEPS array"
+else
+  cmp_deps() { # label, file, extracted list
+    local label="$1" file="$2" got="$3"
+    if [ -z "$got" ]; then
+      fail "$label — no dependency list found in ${file#$ROOT/}"
+      return
+    fi
+    local missing extra
+    missing="$(comm -23 <(echo "$declared_deps") <(echo "$got") | paste -sd' ')"
+    extra="$(comm -13 <(echo "$declared_deps") <(echo "$got") | paste -sd' ')"
+    if [ -z "$missing" ] && [ -z "$extra" ]; then
+      pass "$label matches setup.sh ($(echo "$declared_deps" | paste -sd' '))"
+    else
+      [ -n "$missing" ] && fail "$label omits: $missing"
+      [ -n "$extra" ] && fail "$label lists what setup.sh does not check: $extra"
+    fi
+  }
+  # Site 1 — the workspace CLAUDE.md's inline gloss: `make setup   # ... dep check (a, b, c)`
+  cmp_deps "CLAUDE.md dep-check gloss" "$ROOT/CLAUDE.md" \
+    "$(grep -oE 'dep check \([^)]*\)' "$ROOT/CLAUDE.md" | sed -E 's/dep check \(|\)//g' | norm)"
+  # Site 2 — README §Dependencies: numbered entries headed `**tool:**` or `**tool, tool:**`
+  cmp_deps "README §Dependencies" "${SCRIPT_DIR}/README.md" \
+    "$(sed -nE 's/^[0-9]+\. \*\*([a-z0-9, ]+):\*\*.*/\1/p' "${SCRIPT_DIR}/README.md" | norm)"
+fi
+
+# -----------------------------------------------------------------------------
+# 7. Pinned versions — reminders only, never fatal
 # -----------------------------------------------------------------------------
 if [ "$CHECK_ONLY" != "1" ]; then
   echo -e "\n${C_HIGH}▶ Pinned versions${C_RESET}  ${C_INFO}(reminders — never affect exit code)${C_RESET}"
