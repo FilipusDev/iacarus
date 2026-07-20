@@ -693,7 +693,7 @@ still not reach 30s cleanly.
 > against them. The first run after boot has no predecessor and must emit `-`
 > rather than a fabricated `0`.
 
-### C0 🔴 Demolition - remove glances from the fleet
+### C0 🟢 Demolition - remove glances from the fleet
 
 **Scope**
 - Delete `mon/mon-hw.sh`, `mon/mon-glances-pin.sh`, `hetzner/vps-glances-enable.sh`.
@@ -742,7 +742,7 @@ Fresh boxes need none of this - the cloud-init profile no longer installs it.
 > Reverts `v0.19.0` (the viewer pin) and most of B2. Deliberate: the pin was the
 > right fix for the wrong dependency.
 
-### C1 🔴 On-box collector - `iacarus-collect`
+### C1 🟢 On-box collector - `iacarus-collect`
 
 **Scope**
 - `/usr/local/bin/iacarus-collect`, pure bash + coreutils + curl + docker CLI.
@@ -781,7 +781,7 @@ Fresh boxes need none of this - the cloud-init profile no longer installs it.
   delay the next tick.
 - Disk cost measured and recorded here (projection: ~4 MB for 3 apps over 7d).
 
-### C2 🔴 The board - the `mon-board` target (one-shot)
+### C2 🟢 The board - the `mon-board` target (one-shot)
 
 **Scope**
 - `mon/mon-board.sh`, one SSH per box, boxes fanned out in parallel with `wait`
@@ -803,7 +803,7 @@ Fresh boxes need none of this - the cloud-init profile no longer installs it.
 - A box that is unreachable is rendered as unreachable and does not abort the
   board - the B2 lesson, kept.
 
-### C3 🔴 `--watch` - live view with sparklines
+### C3 🟢 `--watch` - live view with sparklines
 
 **Scope**
 - Redraw by homing the cursor and clearing to end of screen, never `clear`
@@ -816,15 +816,19 @@ Fresh boxes need none of this - the cloud-init profile no longer installs it.
 - `mon-board-watch` refreshes without flicker and restores the terminal on
   Ctrl-C, including after a mid-refresh interrupt.
 
-### C4 🔴 Docs + doctor
+### C4 🟢 Docs + doctor
 
 **Scope**
 - Rewrite `mon/OPERATING.md` around the new board; delete the glances sections.
 - `README.md` + root `CLAUDE.md`: drop glances, describe `mon-board`.
 - Add `mon-board` to the capability table with its question
   (*"what have these boxes and apps been doing?"*).
-- Consider a doctor invariant: every registered app is present in its box's
-  `kamal-proxy list`, catching an app that was deployed but never registered.
+- **Doctor invariant considered and rejected.** "Every registered app appears in
+  its box's `kamal-proxy list`" would require the doctor to SSH into every box,
+  turning a fast offline lint into something that needs the whole fleet
+  reachable - and it would go red when a box is merely *down*, which is not a
+  documentation defect. `mon-board` already surfaces that case honestly
+  (unreachable box, or an app that stops appearing in its own samples).
 
 **Acceptance**
 - `make doctor` green, including the make-target and dependency-gloss checks.

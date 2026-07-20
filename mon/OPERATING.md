@@ -19,6 +19,8 @@ make mon-box-apps        # are the apps up?      (checked from the mon box)
 make mon-box-apps-once   # one pass, non-zero if anything is down (cron/CI)
 
 make mon-apps            # same board, checked from HERE
+make mon-board           # box + app time series, whole fleet on one screen
+make mon-board-watch     # ...live, with sparklines
 make mon-check           # what can this machine actually see?
 ```
 
@@ -42,14 +44,59 @@ when the question is "is it slow for me?".
 | `make mon-check` | *Can this machine see anything?* | nothing | itself |
 | `make mon-list` | *What apps exist?* | nothing | `mon/registry.json` |
 | `make mon-apps` | *Are the apps up, and how slow?* | `curl` | public URLs |
+| `make mon-board` | *What have these boxes and apps been doing?* | `ssh` | collector TSVs on each box |
 | `make mon-box-*` | *…same, asked from the mon box* | `ssh` | the mon box |
 | `make vps-stats` (hetzner/) | *What did ONE box do over 5m/15m/30m/1h?* | `ssh` | sar on that box |
 
-`mon-apps` is the one you leave running: it measures the **public path**, so it
-is the only thing that can tell you the app is unreachable even while the box
-itself is perfectly healthy.
+**`mon-apps` and `mon-board` answer different questions, and both are needed.**
 
-It is read-only and writes nothing to any box.
+`mon-apps` probes the **public URL** from wherever you are: it is the only thing
+that exercises DNS, Cloudflare and the tunnel, so it is the only thing that can
+tell you the app is unreachable *while the box is perfectly healthy*.
+
+`mon-board` reads what the box **recorded about itself** - loopback probes
+through kamal-proxy, plus hardware sampled from `/proc`. It is history, not a
+snapshot, so it answers "when did this start" rather than only "is it bad now".
+
+The two can legitimately disagree: green on the board and red on `mon-apps`
+means the app is fine and the path to it is not. That is the design working.
+
+Both are read-only. Neither writes anything to any box.
+
+---
+
+## Reading `mon-board`
+
+```
+  hetzner-vps-2         cpu  12.5%  mem  39.3%  disk    25%  load 0.67
+    5m cpu 15.8%  15m cpu 13.1%  1h cpu 12.6%  1d cpu 12.6%
+    * mpl            200      42ms  cpu  2.54%  mem 118MB  R3   down 0/114
+      5m 44.1ms   15m 45.2ms   1h 47.7ms   1d 47.8ms
+```
+
+- The **first line per box** is *now*; the line under it is the same metric
+  averaged over each window, so a spike and a trend are never confused.
+- **`down N/M`** is down-samples over total samples in the last hour. An app
+  that flaps reads as `14/114` - a single up/down snapshot would show it green
+  between flaps and tell you nothing.
+- The **restart count** matters more than it looks: an app can be "up" at every
+  sample and still be crash-looping, and this is what catches that.
+- A missing value renders `-`, never `0`. The collector emits `-` when something
+  genuinely could not be measured (first sample after boot, container gone
+  mid-deploy), and averaging a fabricated zero would quietly drag a window down.
+
+`make mon-board-watch` redraws with sparklines instead of window columns - use it
+while you are actively watching something. `make mon-board-once` is the
+scriptable form and **exits non-zero if anything is down**.
+
+### If a box says "no collector installed"
+
+```bash
+cd hetzner && make vps-collect-enable
+```
+
+That ships `iacarus-collect`, its systemd timer and its logrotate policy. It is
+idempotent, and re-running it is also how you deploy a *changed* collector.
 
 ---
 
@@ -140,9 +187,14 @@ A freshly provisioned box needs nothing. For a box built **before** SPRINT B:
 
 ```bash
 cd hetzner
-make vps-stats-enable      # sar history  -> make vps-stats windows
+make vps-stats-enable      # sar history      -> make vps-stats windows
+make vps-collect-enable    # sample collector -> make mon-board
 make vps-mon-setup         # authorize the mon box on it
 ```
+
+A **freshly provisioned** box still needs `make vps-collect-enable`: the
+collector is shipped over SSH rather than embedded in cloud-init, so there is
+one copy of it in the repo instead of two that drift.
 
 Apps register themselves: `make vps-app-add` writes `mon/registry.json` and
 `make vps-app-remove` drops the entry. `make mon-register` backfills apps that

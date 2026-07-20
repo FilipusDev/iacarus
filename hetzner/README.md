@@ -318,6 +318,27 @@ Enter number (or 'q' to quit): 1
 ✅ Done.
 ```
 
+### make vps-collect-enable
+
+`make vps-collect-enable` installs the **SPRINT C sample collector** on a box:
+`/usr/local/bin/iacarus-collect`, a systemd timer that fires it every 30s, and a
+logrotate policy keeping 7 compressed days. That is what `make mon-board` reads.
+
+It is idempotent, and re-running it is also how you **deploy a changed
+collector** - there is no separate update path.
+
+> **Why this isn't in cloud-init.** The collector is ~200 lines of bash.
+> Embedding it in the user-data template would mean two copies that drift, and
+> cloud-init is the copy you cannot test without minting a box. Shipping it over
+> SSH keeps one source of truth (`hetzner/iacarus-collect.sh`). The cost is that
+> a fresh box needs this one extra command - the same shape as a mon box needing
+> `make vps-mon-setup`.
+
+It samples hardware from `/proc` rather than from `sar`: `sar` collects every 2
+minutes and the board samples every 30 seconds, and rendering two resolutions in
+adjacent rows is the kind of quiet mismatch that makes a board untrustworthy.
+`make vps-stats` keeps using `sar` for its longer windows.
+
 ### make vps-new-mon
 
 `make vps-new-mon` provisions a **MON box**: an always-on host for the stateless

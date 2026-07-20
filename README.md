@@ -8,7 +8,7 @@ inspired by the "The One Person Framework" [article](https://world.hey.com/dhh/t
 Please read this `README` from top to bottom. (Yes, really 😅).
 If you prefer debugging for 2 hours to save 5 minutes of reading -> go to [TL;DR](#🦥-tldr).
 
-Currently (`v0.19.0`) it automates the provisioning of hardened **Hetzner VPS**
+Currently (`v0.20.0`) it automates the provisioning of hardened **Hetzner VPS**
 servers, and **Cloudflare R2** storage buckets using simple Bash scripts and Makefiles.
 
 ## 🗺️ TODO
@@ -55,7 +55,7 @@ tier - check the [Hetzner console](https://console.hetzner.cloud) for
 updated availability, since server types come and go over time.
 We're talking about a few bucks (USD) cheap. Per VPS!
 
-As of now (`v0.19.0`) you'll need 2 accounts: one for Hetzner and one for Cloudflare.
+As of now (`v0.20.0`) you'll need 2 accounts: one for Hetzner and one for Cloudflare.
 
 At Hetzner, we'll manage server boxes (VPS).
 At Cloudflare, we'll manage Zero Trust tunnels and R2 storage buckets.
@@ -341,6 +341,7 @@ where it runs is a runtime choice, never a code fork.
 ```sh
 cd mon
 make mon-apps    # live app liveness + latency board (public URLs, no creds)
+make mon-board   # box + app time series, whole fleet on one screen
 make mon-check   # what can this machine actually see?
 ```
 
