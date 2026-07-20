@@ -164,8 +164,30 @@ if [ "$CHECK_ONLY" != "1" ]; then
     while IFS=$'\t' read -r tool pinned where upstream reviewed; do
       case "$tool" in ''|\#*) continue ;; esac
       age=$(( (now - $(date -u -d "$reviewed" +%s 2>/dev/null || echo "$now")) / 86400 ))
-      line=$(printf "%-13s %-10s %-38s reviewed %sd ago" "$tool" "$pinned" "$where" "$age")
-      if [ "$age" -ge "$STALE_DAYS" ]; then
+
+      # Verify the registry against reality. A registry that can drift from the files it describes
+      # is the very failure this tool exists to catch — without this, bumping LITESTREAM_VERSION in
+      # config.sh and forgetting the TSV leaves the doctor confidently reporting the old value.
+      drift=""
+      if [ "$where" != "-" ]; then
+        # "mpl/..." rows live outside the workspace root; resolve them through mpl_dir.
+        wfile="$ROOT/$where"
+        case "$where" in mpl/*) wfile="$(mpl_dir)/${where#mpl/}" ;; esac
+        if [ ! -f "$wfile" ]; then
+          drift="${C_ERROR}(where: $where not found)${C_RESET}"
+        elif ! grep -qF "$pinned" "$wfile" 2>/dev/null; then
+          actual="$(grep -ohE '\bv?[0-9]+\.[0-9]+(\.[0-9]+)?\b' "$wfile" 2>/dev/null | head -1)"
+          drift="${C_ERROR}(REGISTRY DRIFT: file says ${actual:-?}, registry says $pinned)${C_RESET}"
+        fi
+      fi
+
+      shown="$where"; [ "$where" = "-" ] && shown="(nothing pins it locally)"
+      line=$(printf "%-14s %-10s %-34s reviewed %sd ago" "$tool" "$pinned" "$shown" "$age")
+
+      if [ -n "$drift" ]; then
+        # Registry drift is a real defect, not a reminder — it makes the doctor itself untrustworthy.
+        fail "$line  $drift"
+      elif [ "$age" -ge "$STALE_DAYS" ]; then
         warn "$line  ${C_WARN}→ review${C_RESET}"
       else
         pass "$line"
@@ -174,8 +196,12 @@ if [ "$CHECK_ONLY" != "1" ]; then
       if [ "$upstream" != "-" ] && command -v jq >/dev/null 2>&1; then
         latest=$(curl -fsS --max-time 4 "https://api.github.com/repos/${upstream}/releases/latest" 2>/dev/null \
                  | jq -r '.tag_name // empty' 2>/dev/null)
+        # Repos that tag without cutting Releases (kamal-proxy) 404 above; newest tag is close enough
+        # for a reminder.
+        [ -z "$latest" ] && latest=$(curl -fsS --max-time 4 "https://api.github.com/repos/${upstream}/tags?per_page=1" 2>/dev/null \
+                 | jq -r '.[0].name // empty' 2>/dev/null)
         [ -n "$latest" ] && [ "$latest" != "$pinned" ] \
-          && skip "  ${tool} upstream: ${latest} available (pinned ${pinned})"
+          && skip "  ${tool} upstream: ${latest} available ($([ "$pinned" = floating ] && echo unpinned || echo "pinned ${pinned}"))"
       fi
     done < "$REG"
   fi
