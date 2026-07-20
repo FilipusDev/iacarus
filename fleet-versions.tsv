@@ -31,7 +31,7 @@ ubuntu	24.04	iacarus/.env.example	-	2026-07-20
 # Listed on purpose. "We do not pin this" is a decision worth being able to see, and the upstream
 # column still surfaces when a floating tool has moved a long way from what you last saw.
 kamal-proxy	floating	-	basecamp/kamal-proxy	2026-07-20
-glances	floating	-	nicolargo/glances	2026-07-20
+glances	3.4.0.3	iacarus/config.sh	nicolargo/glances	2026-07-20
 docker.io	floating	-	-	2026-07-20
 docker-buildx	floating	-	-	2026-07-20
 op	floating	-	-	2026-07-20
