@@ -55,6 +55,30 @@ if [ -z "$TERM" ] || [ "$TERM" = "dumb" ] || [ "$TERM" = "unknown" ]; then
     exit 1
 fi
 
+# 1c. glances refuses to talk across a MAJOR version boundary: client.py checks
+#     'client_version.split(".")[0]' against its own and bails out. The browser
+#     turns that refusal into a bare OFFLINE row - the same thing it shows for a
+#     dead box - so a laptop one major ahead of the fleet reads as an outage.
+#     That is precisely the false alarm this script's header refuses to ship, so
+#     we detect the mismatch ourselves and NAME it.
+#
+#     Parsing covers both spellings, because the two ends usually disagree:
+#       3.x -> "Glances v3.4.0.3 with PsUtil v5.9.8"
+#       4.x -> "Glances version:\t4.5.5"
+#     Taking the first dotted number off the first line yields the glances
+#     version in both, and never the PsUtil one.
+function glances_version_of() {
+    # No args: read the LOCAL glances. One arg: read it on that box over ssh.
+    if [ $# -eq 0 ]; then
+        glances --version 2>/dev/null
+    else
+        ssh -n -o BatchMode=yes -o ConnectTimeout=8 "$1" 'glances --version 2>/dev/null' 2>/dev/null
+    fi | grep -oE '[0-9]+\.[0-9]+[0-9.]*' | head -n 1
+}
+
+LOCAL_GLANCES_VERSION=$(glances_version_of)
+LOCAL_GLANCES_MAJOR=${LOCAL_GLANCES_VERSION%%.*}
+
 # 2. Which boxes? This is the one place the execution context genuinely changes
 #    behaviour (see mon_context in utils.sh):
 #      operator -> ask Hetzner, so boxes with no registered app are still shown
@@ -141,6 +165,7 @@ function port_answers() {
 echo ""
 LOCAL_PORT=$MON_GLANCES_LOCAL_PORT_BASE
 SERVER_IDX=0
+MISMATCH_IDX=0
 
 for BOX in "${BOXES[@]}"; do
     # THIS box, if the viewer happens to be running on one of them (the mon box
@@ -189,6 +214,25 @@ for BOX in "${BOXES[@]}"; do
     done
 
     if [ "$READY" -eq 1 ]; then
+        # The tunnel carries traffic, so the box is up and serving - anything
+        # wrong from here is a COMPATIBILITY problem, not a reachability one.
+        # Check it now, while we still have a working connection to ask over.
+        #
+        # Only a mismatch we can PROVE drops a box: an unreadable remote version
+        # (older glances, odd PATH under a non-login shell) leaves both sides
+        # unknown, and refusing to draw a box we merely failed to interrogate
+        # would trade a wrong OFFLINE for a wrong omission. Fall through and let
+        # the board try - the worst case is the OFFLINE row we already had.
+        REMOTE_GLANCES_VERSION=$(glances_version_of "$BOX")
+
+        if [ -n "$LOCAL_GLANCES_MAJOR" ] && [ -n "$REMOTE_GLANCES_VERSION" ] &&
+           [ "${REMOTE_GLANCES_VERSION%%.*}" != "$LOCAL_GLANCES_MAJOR" ]; then
+            kill "$PID" 2>/dev/null
+            MISMATCH_IDX=$((MISMATCH_IDX + 1))
+            echo -e "   ${C_WARN}⚠️  ${BOX} skipped${C_RESET} ${C_INFO}(glances ${REMOTE_GLANCES_VERSION} on the box vs ${LOCAL_GLANCES_VERSION} here - majors must match)${C_RESET}"
+            continue
+        fi
+
         TUNNEL_PIDS+=("$PID")
         SERVER_IDX=$((SERVER_IDX + 1))
 
@@ -217,10 +261,28 @@ for BOX in "${BOXES[@]}"; do
 done
 
 # 6. Nothing came up - say so plainly rather than opening an empty browser.
+#    A version skew and an unreachable box are different failures with different
+#    fixes, so they get different endings: 'vps-glances-enable' is the right
+#    advice for the second and useless for the first, since re-running it just
+#    reinstalls the same packaged version the viewer already refuses to talk to.
 if [ "$SERVER_IDX" -eq 0 ]; then
-    echo -e "\n${C_ERROR}❌ No box could be reached - nothing to display.${C_RESET}"
-    echo -e "${C_INFO}   Check 'make mon-check', then 'make vps-glances-enable' on the box.${C_RESET}\n"
+    if [ "$MISMATCH_IDX" -gt 0 ]; then
+        echo -e "\n${C_ERROR}❌ Every box runs a glances major this viewer cannot talk to.${C_RESET}"
+        echo -e "${C_INFO}   The boxes are UP - glances refuses the connection, it is not an outage.${C_RESET}"
+        echo -e "${C_INFO}   This viewer has ${C_RESET}${C_HIGH}${LOCAL_GLANCES_VERSION}${C_RESET}${C_INFO}; the fleet ships whatever its distro packages.${C_RESET}"
+        echo -e "${C_INFO}   Match the majors on either end - e.g. a pinned glances in a venv here.${C_RESET}\n"
+    else
+        echo -e "\n${C_ERROR}❌ No box could be reached - nothing to display.${C_RESET}"
+        echo -e "${C_INFO}   Check 'make mon-check', then 'make vps-glances-enable' on the box.${C_RESET}\n"
+    fi
     exit 1
+fi
+
+# Some boxes made it and some did not - carry the reason past the board, which
+# is about to repaint the screen and take these lines with it.
+if [ "$MISMATCH_IDX" -gt 0 ]; then
+    echo ""
+    echo -e "${C_WARN}⚠️  ${MISMATCH_IDX} box(es) left out over a glances major mismatch (viewer: ${LOCAL_GLANCES_VERSION}).${C_RESET}"
 fi
 
 # 7. Hand over to glances. --browser reads the [serverlist] we just wrote and
