@@ -16,14 +16,19 @@ LITESTREAM_VERSION="v0.3.13"
 # --- SOURCE ENV FILE ---
 
 # 1. Determine the Project Root (Where .env lives)
-if [ -f ".env" ]; then
-  ENV_FILE=".env"
-  PROJECT_ROOT="."
-elif [ -f "../.env" ]; then
-  ENV_FILE="../.env"
-  PROJECT_ROOT=".."
-else
-  echo -e "${C_ERROR}❌ Error: Could not find .env file.${C_RESET}"
+#
+# Resolved from this file's own location, never from the caller's cwd. config.sh is sourced three
+# ways — from the repo root (`source config.sh`), from a domain dir (`source ../config.sh`), and by
+# absolute path (fleet-doctor) — and a cwd-relative probe finds .env for the first two but misses it
+# for any caller invoked from somewhere else. That miss is worse than it looks: `exit` inside a
+# sourced file terminates the CALLER, so the failure presents as the caller dying with no output at
+# all, no matter what guard it wrapped the `source` in.
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="${PROJECT_ROOT}/.env"
+
+if [ ! -f "$ENV_FILE" ]; then
+  echo -e "${C_ERROR}❌ Error: Could not find .env file (looked in ${PROJECT_ROOT}).${C_RESET}" >&2
+  echo -e "   Run 'make setup' to create one from .env.example." >&2
   exit 1
 fi
 
