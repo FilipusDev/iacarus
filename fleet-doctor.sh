@@ -151,7 +151,108 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# 5. Pinned versions — reminders only, never fatal
+# 5. iacarus's version is restated in prose — every copy must match config.mk
+# -----------------------------------------------------------------------------
+# config.mk is the single source; README.md and CLAUDE.md restate it for readers. Keeping them in
+# sync is a rule nobody remembers mid-bump: a `v0.13.2` sat in CLAUDE.md through three releases.
+echo -e "\n${C_HIGH}▶ Version restatement${C_RESET}"
+declared="$(sed -nE 's/^VERSION := (v[0-9]+\.[0-9]+\.[0-9]+).*/\1/p' "${SCRIPT_DIR}/config.mk")"
+if [ -z "$declared" ]; then
+  fail "config.mk declares no VERSION"
+else
+  # Only the two files iacarus/CLAUDE.md names as the version artifact. A version string anywhere
+  # else — a changelog, an ADR, a tag list — is history and must NOT be rewritten to match.
+  stale=0
+  for f in "${SCRIPT_DIR}/README.md" "${SCRIPT_DIR}/CLAUDE.md"; do
+    [ -f "$f" ] || { fail "${f#$ROOT/} missing"; stale=1; continue; }
+    while IFS= read -r hit; do
+      [ -z "$hit" ] && continue
+      found="${hit#*:}"; found="${found//\`/}"
+      [ "$found" = "$declared" ] \
+        || { fail "${f#$ROOT/}:${hit%%:*} says $found, config.mk says $declared"; stale=1; }
+    done <<< "$(grep -noE '`v[0-9]+\.[0-9]+\.[0-9]+`' "$f")"
+  done
+  [ "$stale" = "0" ] && pass "$declared restated consistently in README.md, CLAUDE.md"
+fi
+
+# -----------------------------------------------------------------------------
+# 6. setup.sh's DEPS array is restated in prose — every copy must match it
+# -----------------------------------------------------------------------------
+# setup.sh is what actually checks; the docs only describe. When they disagree, a reader installs
+# the wrong set and `make setup` fails on a tool no doc mentioned — which is how `make` and
+# `glances` went missing from the root CLAUDE.md list for two releases.
+#
+# The two restatement sites are named explicitly because they are structurally different: one is a
+# parenthesised inline list, the other a numbered section with comma-grouped bold headers. A generic
+# extractor would match neither reliably, so each gets its own two-line parser.
+echo -e "\n${C_HIGH}▶ Dependency list${C_RESET}"
+norm() { tr ',' '\n' | tr -d ' `*' | grep -v '^$' | sort -u; }
+declared_deps="$(sed -nE 's/^DEPS=\((.*)\)/\1/p' "${SCRIPT_DIR}/setup.sh" | tr -d '"' | tr ' ' ',' | norm)"
+if [ -z "$declared_deps" ]; then
+  fail "setup.sh declares no DEPS array"
+else
+  cmp_deps() { # label, file, extracted list
+    local label="$1" file="$2" got="$3"
+    if [ -z "$got" ]; then
+      fail "$label — no dependency list found in ${file#$ROOT/}"
+      return
+    fi
+    local missing extra
+    missing="$(comm -23 <(echo "$declared_deps") <(echo "$got") | paste -sd' ')"
+    extra="$(comm -13 <(echo "$declared_deps") <(echo "$got") | paste -sd' ')"
+    if [ -z "$missing" ] && [ -z "$extra" ]; then
+      pass "$label matches setup.sh ($(echo "$declared_deps" | paste -sd' '))"
+    else
+      [ -n "$missing" ] && fail "$label omits: $missing"
+      [ -n "$extra" ] && fail "$label lists what setup.sh does not check: $extra"
+    fi
+  }
+  # Site 1 — the workspace CLAUDE.md's inline gloss: `make setup   # ... dep check (a, b, c)`
+  cmp_deps "CLAUDE.md dep-check gloss" "$ROOT/CLAUDE.md" \
+    "$(grep -oE 'dep check \([^)]*\)' "$ROOT/CLAUDE.md" | sed -E 's/dep check \(|\)//g' | norm)"
+  # Site 2 — README §Dependencies: numbered entries headed `**tool:**` or `**tool, tool:**`
+  cmp_deps "README §Dependencies" "${SCRIPT_DIR}/README.md" \
+    "$(sed -nE 's/^[0-9]+\. \*\*([a-z0-9, ]+):\*\*.*/\1/p' "${SCRIPT_DIR}/README.md" | norm)"
+fi
+
+# -----------------------------------------------------------------------------
+# 7. SCHEMA declares the item's fields; RUNBOOK records them — the two must agree
+# -----------------------------------------------------------------------------
+# The highest-stakes pairing in the fleet, and the only one whose failure surfaces during a restore:
+# a field SCHEMA declares but RUNBOOK never writes is a field nobody records, and you find out on
+# the one day there is no time to reconstruct it. Eleven were missing when this was checked by hand.
+echo -e "\n${C_HIGH}▶ SCHEMA ↔ RUNBOOK field parity${C_RESET}"
+SCHEMA="$ROOT/daedalus/SCHEMA.md"; RUNBOOK="$ROOT/daedalus/RUNBOOK.md"
+if [ ! -f "$SCHEMA" ] || [ ! -f "$RUNBOOK" ]; then
+  skip "SCHEMA.md or RUNBOOK.md missing — parity check skipped"
+else
+  # SCHEMA side, two extractions because the file names fields two ways:
+  #   1. op:// references — exact, and the only form for r2/edge/rails/bkp. Restricted to <SLUG>
+  #      items: op://DevOps/iacarus/... is the control plane's own item, not a per-app field.
+  #   2. the `meta` table's first column — meta is recorded, never referenced, so it has no op:// form.
+  schema_fields="$( { grep -ohE 'op://DevOps(-Recovery)?/<SLUG>/[a-z_]+/[a-z_]+' "$SCHEMA" \
+                        | sed -E 's#.*/([a-z_]+)/([a-z_]+)$#\1.\2#'
+                      awk '/^### `meta`/{m=1;next} /^#{2,3} /{m=0} m && /^\|/{print}' "$SCHEMA" \
+                        | cut -d'|' -f2 | grep -oE '`[a-z_]+`' | tr -d '`' | sed 's/^/meta./'
+                    } | sort -u )"
+  # RUNBOOK side: every field it tells you to write, in `section.field[type]=` form.
+  runbook_fields="$(grep -ohE '"[a-z_]+\.[a-z_]+\[' "$RUNBOOK" | tr -d '"[' | sort -u)"
+
+  # `smoke.*` is the one deliberate asymmetry: SCHEMA documents it to say it is FORBIDDEN in a new
+  # app (Ephemeral Smoke Rule, ADR-0007 §5), so a RUNBOOK that records it would be the defect.
+  unrecorded="$(comm -23 <(echo "$schema_fields") <(echo "$runbook_fields") | grep -v '^smoke\.' | paste -sd' ')"
+  undeclared="$(comm -13 <(echo "$schema_fields") <(echo "$runbook_fields") | paste -sd' ')"
+
+  [ -z "$unrecorded" ] \
+    && pass "all $(echo "$schema_fields" | grep -vc '^smoke\.') SCHEMA fields are recorded by RUNBOOK" \
+    || fail "SCHEMA declares fields RUNBOOK never records: $unrecorded"
+  [ -z "$undeclared" ] \
+    && pass "RUNBOOK records nothing SCHEMA has not declared" \
+    || fail "RUNBOOK records fields SCHEMA never declares: $undeclared"
+fi
+
+# -----------------------------------------------------------------------------
+# 8. Pinned versions — reminders only, never fatal
 # -----------------------------------------------------------------------------
 if [ "$CHECK_ONLY" != "1" ]; then
   echo -e "\n${C_HIGH}▶ Pinned versions${C_RESET}  ${C_INFO}(reminders — never affect exit code)${C_RESET}"
