@@ -241,16 +241,21 @@ echo -e "${C_INFO}==============================================================
 echo -e "${C_INFO}📋 COPY-PASTE SNIPPET FOR YOUR RAILS APP CREDENTIALS (upload bucket only)${C_RESET}"
 echo -e "${C_INFO}=============================================================================${C_RESET}"
 echo -e "${C_WARN}# 1. Add these to your Rails encrypted credentials (e.g. EDITOR=vim bin/rails${C_RESET}"
-echo -e "${C_WARN}#    credentials:edit --environment=$ENVIRONMENT):${C_RESET}"
+echo -e "${C_WARN}#    credentials:edit --environment=$ENVIRONMENT), nested under the EXISTING${C_RESET}"
+echo -e "${C_WARN}#    'cf:' key - it already holds 'tunnel_token'. A second top-level 'cf:'${C_RESET}"
+echo -e "${C_WARN}#    silently replaces the first one in YAML, taking the tunnel token with it:${C_RESET}"
 cat <<SNIPPET
-r2:
-  public_bucket: "$UPL_BUCKET"
-  access_key_id: "$UPL_ACCESS_KEY_ID"
-  secret_access_key: "$UPL_SECRET_ACCESS_KEY"
-  endpoint: "$CF_R2_S3_CLIENT_URL"
+cf:
+  # tunnel_token: "..."   <- leave whatever is already here untouched
+  r2:
+    public_bucket: "$UPL_BUCKET"
+    access_key_id: "$UPL_ACCESS_KEY_ID"
+    secret_access_key: "$UPL_SECRET_ACCESS_KEY"
+    endpoint: "$CF_R2_S3_CLIENT_URL"
 SNIPPET
 echo -e "${C_WARN}#${C_RESET}"
-echo -e "${C_WARN}# 2. Reference them inside config/storage.yml using your standard patterns.${C_RESET}"
+echo -e "${C_WARN}# 2. Read them in config/storage.yml as credentials.dig(:cf, :r2, :<field>) -${C_RESET}"
+echo -e "${C_WARN}#    never as literal bucket names, keys, or endpoints.${C_RESET}"
 echo -e "${C_WARN}# This credential can ONLY reach '$UPL_BUCKET' - it has no access to the${C_RESET}"
 echo -e "${C_WARN}# backup bucket, even if this app is compromised.${C_RESET}"
 echo -e "${C_INFO}=============================================================================${C_RESET}"
