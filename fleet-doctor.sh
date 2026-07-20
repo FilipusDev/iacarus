@@ -15,10 +15,14 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/config.sh" >/dev/null 2>&1 || {
-  C_ERROR='\e[1;31m'; C_SUCCESS='\e[1;32m'; C_WARN='\e[1;38;5;226m'
-  C_INFO='\e[38;5;39m'; C_HIGH='\e[38;5;171m'; C_RESET='\e[0m'
-}
+
+# Colors only — the doctor reads no secret and no provider setting, so it deliberately does NOT
+# source config.sh. It used to, and inherited config.sh's exits: a missing .env or a locked vault
+# killed the whole run before the first check printed. `exit` inside a sourced file terminates the
+# CALLER rather than failing the `source`, so the fallback that used to sit here could never be
+# reached — the doctor died printing nothing at all, which is the worst possible failure mode for
+# the one tool whose job is noticing that something is wrong. palette.sh has no such dependencies.
+source "${SCRIPT_DIR}/palette.sh"
 
 # The workspace root is iacarus's parent: the dir holding the sibling repos. Every path below is
 # relative to it, so the script works regardless of where it is invoked from.
@@ -266,6 +270,10 @@ fi
 echo -e "\n${C_HIGH}▶ Make targets${C_RESET}"
 declare -A target_dirs=()
 while IFS= read -r mk; do
+  # A partial checkout finds no Makefile at all; without this the loop hands sed an empty filename
+  # and every documented target is then reported as undefined — a wall of failures describing the
+  # checkout rather than the docs.
+  [ -n "$mk" ] || continue
   d="$(dirname "$mk")"
   while IFS= read -r t; do
     [ -n "$t" ] && target_dirs["$t"]+="$d "
@@ -274,6 +282,9 @@ done <<< "$( { find "$ROOT" -name Makefile -not -path '*/.git/*'
                [ -n "$(mpl_dir)" ] && find "$(mpl_dir)" -maxdepth 1 -name Makefile; } 2>/dev/null )"
 
 unknown=0; misplaced=0; checked=0
+if [ "${#target_dirs[@]}" = "0" ]; then
+  skip "no Makefile found — target check skipped"
+else
 while IFS= read -r hit; do
   [ -z "$hit" ] && continue
   file="${hit%%:*}"; rest="${hit#*:}"; line="${rest%%:*}"; text="${rest#*:}"
@@ -309,6 +320,7 @@ done <<< "$(md_files | xargs grep -nE '\bmake [a-z][a-z0-9_-]*' 2>/dev/null)"
 
 [ "$unknown" = "0" ] && pass "every 'make <target>' named in the docs exists ($checked references)"
 [ "$misplaced" = "0" ] && pass "every 'cd X && make y' names the directory that defines y"
+fi
 
 # -----------------------------------------------------------------------------
 # 9. Pinned versions — reminders only, never fatal

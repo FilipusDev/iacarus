@@ -2,12 +2,9 @@
 
 # --- COLOR DEFINITIONS ---
 
-C_ERROR='\e[1;31m'      # Bold Red (Critical)
-C_SUCCESS='\e[1;32m'    # Bold Green (Success)
-C_WARN='\e[1;38;5;226m' # Bold Yellow
-C_INFO='\e[38;5;39m'    # Blue
-C_HIGH='\e[38;5;171m'   # Turquoise
-C_RESET='\e[0m'
+# Resolved from this file's own location so it works from any cwd, exactly like .env below.
+# Anything needing only colors should source palette.sh directly and skip everything after it.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/palette.sh"
 
 # --- TOOLKIT VERSIONS ---
 
@@ -16,14 +13,19 @@ LITESTREAM_VERSION="v0.3.13"
 # --- SOURCE ENV FILE ---
 
 # 1. Determine the Project Root (Where .env lives)
-if [ -f ".env" ]; then
-  ENV_FILE=".env"
-  PROJECT_ROOT="."
-elif [ -f "../.env" ]; then
-  ENV_FILE="../.env"
-  PROJECT_ROOT=".."
-else
-  echo -e "${C_ERROR}❌ Error: Could not find .env file.${C_RESET}"
+#
+# Resolved from this file's own location, never from the caller's cwd. config.sh is sourced three
+# ways — from the repo root (`source config.sh`), from a domain dir (`source ../config.sh`), and by
+# absolute path (fleet-doctor) — and a cwd-relative probe finds .env for the first two but misses it
+# for any caller invoked from somewhere else. That miss is worse than it looks: `exit` inside a
+# sourced file terminates the CALLER, so the failure presents as the caller dying with no output at
+# all, no matter what guard it wrapped the `source` in.
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="${PROJECT_ROOT}/.env"
+
+if [ ! -f "$ENV_FILE" ]; then
+  echo -e "${C_ERROR}❌ Error: Could not find .env file (looked in ${PROJECT_ROOT}).${C_RESET}" >&2
+  echo -e "   Run 'make setup' to create one from .env.example." >&2
   exit 1
 fi
 
@@ -43,10 +45,19 @@ if grep -qE '^[A-Za-z_][A-Za-z0-9_]*=op://' "$ENV_FILE"; then
     echo -e "   Install it, or replace the references with literal values on a machine that cannot run op."
     exit 1
   fi
-  source <(op inject -i "$ENV_FILE") || {
-    echo -e "${C_ERROR}❌ Error: op inject could not resolve $ENV_FILE (is 1Password unlocked?).${C_RESET}"
+  # Capture BEFORE sourcing, because `source <(op inject …)` cannot fail: process substitution
+  # reports the exit status of `source` reading an empty stream, not of `op inject`. A locked or
+  # dismissed vault therefore looked like success and left every value unset — the guard below has
+  # never once fired. Downstream that is worse than a hard stop: scripts carry on with empty tokens.
+  #
+  # The resolved text sits in a shell variable for exactly two lines and is unset immediately. That
+  # keeps the values in this process's memory, the same boundary as before — nothing reaches disk.
+  ENV_RESOLVED="$(op inject -i "$ENV_FILE")" || {
+    echo -e "${C_ERROR}❌ Error: op inject could not resolve $ENV_FILE (is 1Password unlocked?).${C_RESET}" >&2
     exit 1
   }
+  source <(printf '%s\n' "$ENV_RESOLVED")
+  unset ENV_RESOLVED
 else
   source "$ENV_FILE"
 fi
