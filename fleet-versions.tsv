@@ -1,0 +1,23 @@
+# Pinned tool versions across the fleet — the review registry for `make doctor`.
+#
+# This file does NOT drive anything. Nothing is installed, upgraded, or asserted from it. It answers
+# one question a human reliably forgets: "when did I last think about this pin?" The bump itself
+# stays a decision — auto-bumping Litestream would change what replicates your only backups, and
+# auto-bumping Rails would change what boots in production.
+#
+# After reviewing a pin (whether or not you changed it), update its reviewed date. A review that
+# concluded "stay put" is still a review.
+#
+# Columns, tab-separated:
+#   tool      short name
+#   pinned    the value currently pinned
+#   where     path:line (relative to the workspace root) — doctor reports drift if it can't find it
+#   upstream  github owner/repo for a best-effort latest-release check, or "-" to skip
+#   reviewed  YYYY-MM-DD, the last time a human looked
+#
+# tool	pinned	where	upstream	reviewed
+litestream	v0.3.13	iacarus/config.sh	benbjohnson/litestream	2026-07-20
+ruby	3.4.10	_template_rails-app/BLUEPRINT.md	-	2026-07-20
+rails	8.1.3	_template_rails-app/BLUEPRINT.md	-	2026-07-20
+kamal-proxy	v0.9.2	-	basecamp/kamal-proxy	2026-07-20
+ubuntu	24.04	iacarus/.env.example	-	2026-07-20

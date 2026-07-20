@@ -6,6 +6,7 @@ include config.mk
 #
 # CONTROL PLANES
 #   make setup       Local wizard + dependency check.
+#   make doctor      Fleet-wide doc invariants + pinned-version reminders (read-only).
 #   make hetzner     Hetzner VPS control plane (provision, health, Litestream).
 #   make cloudflare  Cloudflare R2 control plane (bucket lifecycle).
 #   make mon         Stateless observability viewer (fleet + app monitoring).
@@ -31,6 +32,9 @@ help: ## Show this help message
 setup: ## Run the setup script
 	@./setup.sh
 
+doctor: ## Check fleet-wide doc invariants + pinned-version reminders (read-only)
+	@./fleet-doctor.sh
+
 hetzner: ## Enter Hetzner Control Plane
 	@$(MAKE) -C hetzner help
 
@@ -40,4 +44,4 @@ cloudflare: ## Enter Cloudflare Control Plane
 mon: ## Enter Mon (Observability) Control Plane
 	@$(MAKE) -C mon help
 
-.PHONY: help setup hetzner cloudflare mon
+.PHONY: help setup doctor hetzner cloudflare mon
