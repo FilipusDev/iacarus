@@ -270,6 +270,10 @@ fi
 echo -e "\n${C_HIGH}▶ Make targets${C_RESET}"
 declare -A target_dirs=()
 while IFS= read -r mk; do
+  # A partial checkout finds no Makefile at all; without this the loop hands sed an empty filename
+  # and every documented target is then reported as undefined — a wall of failures describing the
+  # checkout rather than the docs.
+  [ -n "$mk" ] || continue
   d="$(dirname "$mk")"
   while IFS= read -r t; do
     [ -n "$t" ] && target_dirs["$t"]+="$d "
@@ -278,6 +282,9 @@ done <<< "$( { find "$ROOT" -name Makefile -not -path '*/.git/*'
                [ -n "$(mpl_dir)" ] && find "$(mpl_dir)" -maxdepth 1 -name Makefile; } 2>/dev/null )"
 
 unknown=0; misplaced=0; checked=0
+if [ "${#target_dirs[@]}" = "0" ]; then
+  skip "no Makefile found — target check skipped"
+else
 while IFS= read -r hit; do
   [ -z "$hit" ] && continue
   file="${hit%%:*}"; rest="${hit#*:}"; line="${rest%%:*}"; text="${rest#*:}"
@@ -313,6 +320,7 @@ done <<< "$(md_files | xargs grep -nE '\bmake [a-z][a-z0-9_-]*' 2>/dev/null)"
 
 [ "$unknown" = "0" ] && pass "every 'make <target>' named in the docs exists ($checked references)"
 [ "$misplaced" = "0" ] && pass "every 'cd X && make y' names the directory that defines y"
+fi
 
 # -----------------------------------------------------------------------------
 # 9. Pinned versions — reminders only, never fatal
