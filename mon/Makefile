@@ -17,6 +17,7 @@ LIST_SCRIPT     := ./mon-list.sh
 REGISTER_SCRIPT := ./mon-register.sh
 APPS_SCRIPT     := ./mon-apps.sh
 REMOTE_SCRIPT   := ./mon-remote.sh
+BOARD_SCRIPT    := ./mon-board.sh
 
 help: ## Show this help message
 	@echo -e "\n$(C_HIGH)| 📡 MON | 🦅 IaCarus ${VERSION} - CONTROL PLANE$(C_RESET)"
@@ -32,6 +33,15 @@ mon-list: ## List the registered apps (offline - no network, no credentials)
 
 mon-register: ## Hand-register an existing app (backfill; derives what it can)
 	@$(REGISTER_SCRIPT)
+
+mon-board: ## Box + app time series, whole fleet on one screen
+	@$(BOARD_SCRIPT)
+
+mon-board-watch: ## Same board, live with sparklines (Ctrl-C to stop)
+	@$(BOARD_SCRIPT) --watch
+
+mon-board-once: ## One pass over the board (non-zero if anything is down)
+	@$(BOARD_SCRIPT) --once
 
 mon-apps: ## Live app liveness + latency board (Ctrl-C to stop)
 	@$(APPS_SCRIPT)
@@ -49,4 +59,4 @@ mon-box-apps: ## App board, run on the mon box
 mon-box-apps-once: ## One app pass on the mon box (non-zero if anything is down)
 	@$(REMOTE_SCRIPT) mon-apps-once --no-tty
 
-.PHONY: help mon-check mon-list mon-register mon-apps mon-apps-once mon-box-apps mon-box-apps-once
+.PHONY: help mon-check mon-list mon-register mon-board mon-board-watch mon-board-once mon-apps mon-apps-once mon-box-apps mon-box-apps-once
