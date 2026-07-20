@@ -252,7 +252,66 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# 8. Pinned versions — reminders only, never fatal
+# 8. Every `make <target>` a doc names must exist, and where it says to run it
+# -----------------------------------------------------------------------------
+# Two distinct defects, and the split is what keeps this check quiet enough to trust:
+#
+#   a. the target exists nowhere in the fleet — a typo (`make vps-check-heath`);
+#   b. the doc says `cd X && make y`, but X's Makefile has no `y` — the RUNBOOK told you to run
+#      `cd iacarus && make vps-app-add` for months; the target lives in `iacarus/hetzner`.
+#
+# Prose that names a target WITHOUT a `cd` is deliberately not checked for location: it is making no
+# claim about where you are, so there is nothing there to be wrong. That is why this needs no
+# opt-out comment — the noisy case was never a defect to begin with.
+echo -e "\n${C_HIGH}▶ Make targets${C_RESET}"
+declare -A target_dirs=()
+while IFS= read -r mk; do
+  d="$(dirname "$mk")"
+  while IFS= read -r t; do
+    [ -n "$t" ] && target_dirs["$t"]+="$d "
+  done <<< "$(sed -nE 's/^([a-z][a-z0-9_-]*):.*/\1/p' "$mk")"
+done <<< "$( { find "$ROOT" -name Makefile -not -path '*/.git/*'
+               [ -n "$(mpl_dir)" ] && find "$(mpl_dir)" -maxdepth 1 -name Makefile; } 2>/dev/null )"
+
+unknown=0; misplaced=0; checked=0
+while IFS= read -r hit; do
+  [ -z "$hit" ] && continue
+  file="${hit%%:*}"; rest="${hit#*:}"; line="${rest%%:*}"; text="${rest#*:}"
+  tgt="$(sed -E 's/.*\bmake ([a-z][a-z0-9_-]*).*/\1/' <<< "$text")"
+  # `make mon-box-*` and `make <target>` document a shape rather than naming one target.
+  grep -qE "\bmake ${tgt}[*<]" <<< "$text" && continue
+  if [ -z "${target_dirs[$tgt]+x}" ]; then
+    # A target named inside a prohibition is the doc doing its job — `make smoke-setup` appears
+    # only to forbid it. Same ALLOW window section 2 uses, for the same reason.
+    lo=$(( line > WINDOW ? line - WINDOW : 1 ))
+    sed -n "${lo},$(( line + WINDOW ))p" "$file" 2>/dev/null | grep -qE "$ALLOW" && continue
+    fail "${file#$ROOT/}:$line — no Makefile defines 'make $tgt'"; unknown=1; continue
+  fi
+  checked=$((checked + 1))
+
+  # Only same-line `cd X && … make y` makes a location claim. A `cd` three paragraphs up does not,
+  # and guessing that it does is how this class of check turns into noise.
+  grep -qE 'cd [^ ]+ &&.*\bmake '"$tgt"'\b' <<< "$text" || continue
+  said="$(sed -E 's/.*cd ([^ ]+) &&.*/\1/' <<< "$text")"
+  # Resolve as the reader would: relative to the doc, to its repo, then to the workspace.
+  docdir="$(dirname "$file")"
+  for base in "$docdir" "$docdir/.." "$ROOT"; do
+    [ -f "$base/$said/Makefile" ] && { resolved="$(cd "$base/$said" && pwd)"; break; }
+    resolved=""
+  done
+  if [ -z "$resolved" ]; then
+    fail "${file#$ROOT/}:$line — 'cd $said' resolves to no directory with a Makefile"; misplaced=1
+  elif ! grep -q " $resolved " <<< " ${target_dirs[$tgt]}"; then
+    homes="$(sed "s|$ROOT/||g; s|$HOME/|~/|g" <<< "${target_dirs[$tgt]% }")"
+    fail "${file#$ROOT/}:$line — 'make $tgt' is not in $said; it lives in $homes"; misplaced=1
+  fi
+done <<< "$(md_files | xargs grep -nE '\bmake [a-z][a-z0-9_-]*' 2>/dev/null)"
+
+[ "$unknown" = "0" ] && pass "every 'make <target>' named in the docs exists ($checked references)"
+[ "$misplaced" = "0" ] && pass "every 'cd X && make y' names the directory that defines y"
+
+# -----------------------------------------------------------------------------
+# 9. Pinned versions — reminders only, never fatal
 # -----------------------------------------------------------------------------
 if [ "$CHECK_ONLY" != "1" ]; then
   echo -e "\n${C_HIGH}▶ Pinned versions${C_RESET}  ${C_INFO}(reminders — never affect exit code)${C_RESET}"
