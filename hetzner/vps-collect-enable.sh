@@ -53,6 +53,7 @@ ssh -q -t "$SELECTED_NAME" \
     "COLLECT_DIR='${MON_COLLECT_DIR}' \
      INTERVAL='${MON_COLLECT_INTERVAL}' \
      RETAIN='${MON_COLLECT_RETAIN_DAYS}' \
+     STATS_EVERY='${MON_COLLECT_STATS_EVERY}' \
      bash -s" << 'EOF'
 
 G='\033[1;32m'
@@ -72,6 +73,7 @@ After=docker.service
 
 [Service]
 Type=oneshot
+Environment=MON_COLLECT_STATS_EVERY=${STATS_EVERY}
 ExecStart=/usr/local/bin/iacarus-collect
 UNIT
 

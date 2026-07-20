@@ -113,6 +113,13 @@ MON_COLLECT_RETAIN_DAYS="${MON_COLLECT_RETAIN_DAYS:-7}"
 # /etc/iacarus/collect.conf rather than changing the fleet default.
 MON_COLLECT_HEALTH_PATH="${MON_COLLECT_HEALTH_PATH:-/up}"
 
+# Sample container CPU/memory every Nth tick. `docker stats --no-stream` is
+# MEASURED at ~2.0s per call against ~0.15s for the rest of the collector
+# combined, and that cost is fixed rather than per-container. At every tick it
+# would burn ~6.7% of a core forever; at every 4th it is ~1.7%, and liveness and
+# latency keep full 30s resolution because that is where a short outage hides.
+MON_COLLECT_STATS_EVERY="${MON_COLLECT_STATS_EVERY:-4}"
+
 # Seconds before the collector abandons a health probe. Must stay well under
 # MON_COLLECT_INTERVAL: a probe that outlives the tick would let systemd skip
 # the next run, silently halving the sample rate.

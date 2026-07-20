@@ -835,9 +835,18 @@ Fresh boxes need none of this - the cloud-init profile no longer installs it.
 
 ### Risks + tradeoffs to carry into C1
 
-- **`docker stats --no-stream` is slow** (~1s+, it samples a window internally).
-  One call for all containers keeps the duty cycle near 3% at 30s. If it grows,
-  drop container stats to every 4th tick rather than lengthening the whole loop.
+- **`docker stats --no-stream` was the whole cost - MEASURED, then fixed.**
+  On hetzner-vps-2 it takes **~2.0s** on its own, against ~0.15s for the rest of
+  the collector combined, and that cost is FIXED rather than per-container (it
+  samples over an internal window). At every 30s tick that is **~6.7% of a core
+  burned continuously, forever** - more than double the ~3% this sprint
+  projected, and too much for a shared vCPU.
+  Applied the escape hatch this section anticipated: container CPU/memory is
+  sampled every 4th tick (`MON_COLLECT_STATS_EVERY`), while liveness and latency
+  keep full 30s resolution because that is where a short outage hides.
+  Measured after: 0.27 / 0.28 / **2.41** / 0.25 / 0.29 s -> **~2.3% duty cycle**.
+  Skipped ticks write `-`, which the reader already skips rather than averaging
+  in, so windows stay correct and "now" falls back to the last real measurement.
 - **30s was chosen over 60s deliberately** - it catches short outages, at double
   the write volume. Revisit if a box ever runs many apps.
 - **Discovery is coupled to kamal-proxy.** An app not fronted by it is invisible

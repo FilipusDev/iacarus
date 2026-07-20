@@ -122,10 +122,33 @@ if [ -z "$APP_ROWS" ]; then
     exit 0
 fi
 
-# One docker stats call for EVERY container, never one per app - it samples
-# internally and is the most expensive thing in this loop. Keyed by short id,
-# which is exactly what kamal-proxy's Target column carries.
-STATS=$(docker stats --no-stream --format '{{.ID}}\t{{.CPUPerc}}\t{{.MemUsage}}' 2>/dev/null)
+# One docker stats call for EVERY container, never one per app. Keyed by short
+# id, which is exactly what kamal-proxy's Target column carries.
+#
+# MEASURED ON A REAL BOX: `docker stats --no-stream` costs ~2.0s on its own,
+# against ~0.15s for everything else in this script combined. It samples over an
+# internal window, so that cost is FIXED - it does not shrink with fewer
+# containers. At a 30s tick that is ~6.7% of a core burned continuously, forever,
+# just to observe. Too much for a shared-vCPU box.
+#
+# So container stats are sampled every Nth tick (default 4 -> every 2 minutes)
+# while liveness and latency stay at full resolution, because those are what a
+# short outage hides in. Skipped ticks write '-', which the reader already skips
+# rather than averaging in - so windows stay CORRECT, just computed over fewer
+# points, and "now" falls back to the last real measurement.
+#
+# Deliberately not solved by lengthening the whole interval: that would trade
+# away outage resolution to fix a cost that only one command causes.
+STATS_EVERY="${MON_COLLECT_STATS_EVERY:-4}"
+TICK=0
+[ -r "${STATE_DIR}/tick" ] && read -r TICK < "${STATE_DIR}/tick" 2>/dev/null
+TICK=$(( (TICK + 1) % STATS_EVERY ))
+echo "$TICK" > "${STATE_DIR}/tick"
+
+STATS=""
+if [ "$TICK" -eq 0 ]; then
+    STATS=$(docker stats --no-stream --format '{{.ID}}\t{{.CPUPerc}}\t{{.MemUsage}}' 2>/dev/null)
+fi
 
 # Human-readable byte size -> MB. docker prints '118MiB / 1.9GiB'; only the
 # first operand matters.
