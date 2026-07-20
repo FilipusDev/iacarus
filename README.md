@@ -8,7 +8,7 @@ inspired by the "The One Person Framework" [article](https://world.hey.com/dhh/t
 Please read this `README` from top to bottom. (Yes, really 😅).
 If you prefer debugging for 2 hours to save 5 minutes of reading -> go to [TL;DR](#🦥-tldr).
 
-Currently (`v0.15.0`) it automates the provisioning of hardened **Hetzner VPS**
+Currently (`v0.16.0`) it automates the provisioning of hardened **Hetzner VPS**
 servers, and **Cloudflare R2** storage buckets using simple Bash scripts and Makefiles.
 
 ## 🗺️ TODO
@@ -55,7 +55,7 @@ tier - check the [Hetzner console](https://console.hetzner.cloud) for
 updated availability, since server types come and go over time.
 We're talking about a few bucks (USD) cheap. Per VPS!
 
-As of now (`v0.15.0`) you'll need 2 accounts: one for Hetzner and one for Cloudflare.
+As of now (`v0.16.0`) you'll need 2 accounts: one for Hetzner and one for Cloudflare.
 
 At Hetzner, we'll manage server boxes (VPS).
 At Cloudflare, we'll manage Zero Trust tunnels and R2 storage buckets.
@@ -121,7 +121,11 @@ During the process you might need to provide a payment method.
 
 ## 📝 Configuration
 
-Copy `.env.example` to `.env` and fill with your configuration secrets.
+Copy `.env.example` to `.env`. Public configuration (SSH paths, VPS profile, account id) is
+filled in literally. **Secret values never land in the file**: each secret is stored in 1Password
+(`op://DevOps/iacarus`) and `.env` carries only its `op://` reference — `config.sh` resolves the
+references in one `op inject` call when a script starts. The sections below tell you where each
+value comes from and which reference names it.
 
 ### SSH Keys
 
@@ -179,8 +183,9 @@ In the `.env` fill the variables:
 # Shared by the token factory AND the R2 S3 endpoint further down.
 CF_ACCOUNT_ID=
 
-# the bearer token value created in step #2 above.
-CF_API_BEARER_TOKEN=
+# the bearer token value created in step #2 above — store it with:
+#   op item edit iacarus --vault DevOps "cf.api_bearer_token[password]=<value>"
+CF_API_BEARER_TOKEN=op://DevOps/iacarus/cf/api_bearer_token
 ```
 
 #### CLOUDFLARE ZERO TRUST TUNNEL
@@ -198,11 +203,12 @@ CF_API_BEARER_TOKEN=
 In the `.env` fill the variables:
 
 ```env
-# a cloudflare tunnel to use for smoke test!
-CF_TUNNEL_SMOKE_TEST_TOKEN=
+# a cloudflare tunnel to use for smoke test! store the value with:
+#   op item edit iacarus --vault DevOps "tunnel.smoke_test_token[password]=<value>"
+CF_TUNNEL_SMOKE_TEST_TOKEN=op://DevOps/iacarus/tunnel/smoke_test_token
 
 # one (or more) cloudflare tunnel(s) - one for each VPS!
-CF_TUNNEL_TOKEN=
+CF_TUNNEL_TOKEN=op://DevOps/iacarus/tunnel/token
 ```
 
 > **Note:** `CF_TUNNEL_TOKEN` is only consumed by IaCarus's own
@@ -252,8 +258,9 @@ In the `.env` fill the variables:
 ```env
 # cloudflare R2 storage token
 
-#  10. copy the value under "Token value" label.
-CF_R2_TOKEN=
+#  10. copy the value under "Token value" label into 1Password:
+#   op item edit iacarus --vault DevOps "cf.r2_token[password]=<value>"
+CF_R2_TOKEN=op://DevOps/iacarus/cf/r2_token
 
 # cloudflare R2 storage tokens : S3 interface
 
@@ -263,11 +270,11 @@ CF_R2_TOKEN=
 #      the API bearer token section above.
 CF_R2_S3_CLIENT_URL=https://${CF_ACCOUNT_ID}.r2.cloudflarestorage.com
 
-#  12. copy the value under "Access Key ID" label.
-CF_R2_S3_CLIENT_ACCESS_KEY_ID=
-
-#  13. copy the value under "Secret Access Key" label.
-CF_R2_S3_CLIENT_SECRET_ACCESS_KEY=
+#  12/13. copy "Access Key ID" and "Secret Access Key" into 1Password:
+#   op item edit iacarus --vault DevOps "r2.s3_access_key_id[password]=<id>" \
+#                                       "r2.s3_secret_access_key[password]=<secret>"
+CF_R2_S3_CLIENT_ACCESS_KEY_ID=op://DevOps/iacarus/r2/s3_access_key_id
+CF_R2_S3_CLIENT_SECRET_ACCESS_KEY=op://DevOps/iacarus/r2/s3_secret_access_key
 
 ```
 

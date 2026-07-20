@@ -23,10 +23,11 @@ backup is restorable **before** spending money on a new box.
 - **Two tiers of R2 credentials exist.** `make vps-app-add` mints scoped
   per-app tokens whose secret lives *only* in `/etc/litestream.yml` on that
   box — they die with the server. The **account-level** credential
-  (`CF_R2_S3_CLIENT_ACCESS_KEY_ID` / `CF_R2_S3_CLIENT_SECRET_ACCESS_KEY` in
-  your local `.env`) never touches any server and is what recovery runs on —
-  the restore, all bucket ops, and token minting all use it. **It must
-  survive the explosion — that's why it lives in `.env`, off the box.**
+  (`op://DevOps/iacarus/r2/s3_access_key_id` / `s3_secret_access_key`,
+  referenced from your local `.env`) never touches any server and is what
+  recovery runs on — the restore, all bucket ops, and token minting all use
+  it. **It must survive the explosion — that's why it lives in 1Password,
+  off every box, and reaches a shell only through `op inject`.**
 - **R2 buckets and their objects are never deleted** by any IaCarus script,
   regardless of what happens to the compute. The backup data itself is not
   at risk — only the box is gone. You **reuse the same `-bkp` bucket**; when
@@ -48,9 +49,10 @@ backup is restorable **before** spending money on a new box.
 
 ## Phase 0 — Readiness checklist (do this before you ever need this doc)
 
-- [ ] `.env` (esp. `CF_R2_S3_CLIENT_ACCESS_KEY_ID` / `_SECRET_ACCESS_KEY` and
-      `CF_API_BEARER_TOKEN`) is backed up somewhere durable off this one
-      machine — it's the only credential path that survives the explosion.
+- [ ] The `op://DevOps/iacarus` item resolves (`make doctor` checks it): the
+      control-plane secrets live in 1Password, which IS the durable off-machine
+      backup — a dead laptop costs a `git clone` plus a 1Password sign-in, not
+      the credentials. `.env` itself holds only references and public config.
 - [ ] The client app's `.kamal/secrets` (`RAILS_MASTER_KEY`,
       `KAMAL_REGISTRY_PASSWORD`, `KAMAL_CF_TUNNEL_TOKEN`, …) is backed up the
       same way, and you can run `kamal` from a shell where those secrets

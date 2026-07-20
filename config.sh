@@ -27,8 +27,29 @@ else
   exit 1
 fi
 
-# 2. Source it
-source "$ENV_FILE"
+# 2. Source it, resolving 1Password references when present.
+#
+# Secrets in .env are `op://` references, not values (see .env.example). `op inject` swaps each
+# reference for its value in ONE call — one desktop-app authorization, never six — and passes every
+# other line through untouched, including `${...}` shell interpolations, which bash then expands at
+# source time exactly as before (that is what keeps CF_R2_S3_CLIENT_URL reusing CF_ACCOUNT_ID).
+# Values exist only in this process's environment; nothing is written to disk.
+#
+# A .env with no references (a mon box's MON_*-only file, or a fresh literal-filled copy) skips op
+# entirely, so boxes without 1Password keep working unchanged.
+if grep -qE '^[A-Za-z_][A-Za-z0-9_]*=op://' "$ENV_FILE"; then
+  if ! command -v op > /dev/null 2>&1; then
+    echo -e "${C_ERROR}❌ Error: $ENV_FILE holds op:// references but the 1Password CLI (op) is not installed.${C_RESET}"
+    echo -e "   Install it, or replace the references with literal values on a machine that cannot run op."
+    exit 1
+  fi
+  source <(op inject -i "$ENV_FILE") || {
+    echo -e "${C_ERROR}❌ Error: op inject could not resolve $ENV_FILE (is 1Password unlocked?).${C_RESET}"
+    exit 1
+  }
+else
+  source "$ENV_FILE"
+fi
 
 # --- MON (OBSERVABILITY) CONFIG ---
 
