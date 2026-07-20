@@ -48,10 +48,19 @@ if grep -qE '^[A-Za-z_][A-Za-z0-9_]*=op://' "$ENV_FILE"; then
     echo -e "   Install it, or replace the references with literal values on a machine that cannot run op."
     exit 1
   fi
-  source <(op inject -i "$ENV_FILE") || {
-    echo -e "${C_ERROR}❌ Error: op inject could not resolve $ENV_FILE (is 1Password unlocked?).${C_RESET}"
+  # Capture BEFORE sourcing, because `source <(op inject …)` cannot fail: process substitution
+  # reports the exit status of `source` reading an empty stream, not of `op inject`. A locked or
+  # dismissed vault therefore looked like success and left every value unset — the guard below has
+  # never once fired. Downstream that is worse than a hard stop: scripts carry on with empty tokens.
+  #
+  # The resolved text sits in a shell variable for exactly two lines and is unset immediately. That
+  # keeps the values in this process's memory, the same boundary as before — nothing reaches disk.
+  ENV_RESOLVED="$(op inject -i "$ENV_FILE")" || {
+    echo -e "${C_ERROR}❌ Error: op inject could not resolve $ENV_FILE (is 1Password unlocked?).${C_RESET}" >&2
     exit 1
   }
+  source <(printf '%s\n' "$ENV_RESOLVED")
+  unset ENV_RESOLVED
 else
   source "$ENV_FILE"
 fi
