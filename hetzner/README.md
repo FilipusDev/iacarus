@@ -159,7 +159,7 @@ config file `./vps-user_data.yml.template`.
 - Check if the server needs a reboot - _a fresh server will always reboot!_
 
 ```sh
-iacarus/hetzner main ❯ make vps-check-heath
+iacarus/hetzner main ❯ make vps-check-health
 
 🔍 Fetching server list from Hetzner...
 Select a server:

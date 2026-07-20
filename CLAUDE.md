@@ -73,7 +73,7 @@ The fleet keeps no plaintext secrets on disk. 1Password holds the values; repos 
 
 - **Version artifact:** `VERSION := vX.Y.Z` in `config.mk`, plus the two `` `vX.Y.Z` `` mentions in
   `README.md`. Behavior here means scripts, cloud-init, or Makefile targets — what a box actually
-  runs. Currently `v0.13.2`.
+  runs. Currently `v0.16.0`.
 - **Everything is interactive and confirmation-gated.** Destruction requires typing the resource
   name; never add a non-interactive bypass flag to a destructive target.
 - **New capability = new script + a `## `-commented Make target** in that domain dir, so the
