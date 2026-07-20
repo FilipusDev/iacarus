@@ -15,10 +15,14 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/config.sh" >/dev/null 2>&1 || {
-  C_ERROR='\e[1;31m'; C_SUCCESS='\e[1;32m'; C_WARN='\e[1;38;5;226m'
-  C_INFO='\e[38;5;39m'; C_HIGH='\e[38;5;171m'; C_RESET='\e[0m'
-}
+
+# Colors only — the doctor reads no secret and no provider setting, so it deliberately does NOT
+# source config.sh. It used to, and inherited config.sh's exits: a missing .env or a locked vault
+# killed the whole run before the first check printed. `exit` inside a sourced file terminates the
+# CALLER rather than failing the `source`, so the fallback that used to sit here could never be
+# reached — the doctor died printing nothing at all, which is the worst possible failure mode for
+# the one tool whose job is noticing that something is wrong. palette.sh has no such dependencies.
+source "${SCRIPT_DIR}/palette.sh"
 
 # The workspace root is iacarus's parent: the dir holding the sibling repos. Every path below is
 # relative to it, so the script works regardless of where it is invoked from.
