@@ -1,5 +1,5 @@
 # --- VERSION CONTROL ---
-VERSION := v0.17.0
+VERSION := v0.18.0
 
 # --- COLORS (Matched to config.sh) ---
 C_ERROR   := \033[1;31m
