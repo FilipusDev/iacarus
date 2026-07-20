@@ -36,6 +36,19 @@ free_root() {
 # Is docker present on the box? (all IaCarus boxes ship it, but guard anyway.)
 HAS_DOCKER=$(ssh -qn "$SELECTED_NAME" "command -v docker >/dev/null && echo 1 || echo 0")
 
+# How many retained Kamal releases are sitting here as stopped containers?
+#
+# Read LOCALLY because the cleanup prompts are local, and a prompt that offers to
+# delete something should be able to say how many. Identified by LABEL, not by
+# name: Kamal stamps every app container with role=web/worker, while accessories
+# carry only 'service' (mpl-cloudflared) and kamal-proxy carries neither - so
+# 'label=role' selects app releases exactly, on any box, for any app slug.
+if [ "$HAS_DOCKER" = "1" ]; then
+    LADDER_COUNT=$(ssh -qn "$SELECTED_NAME" \
+        "sudo docker ps -a --filter label=role --filter status=exited -q 2>/dev/null | wc -l")
+fi
+LADDER_COUNT=${LADDER_COUNT:-0}
+
 echo -e "\n🩺 Inspecting ${C_INFO}$SELECTED_NAME${C_RESET}..."
 echo "----------------------------------------"
 
@@ -66,6 +79,22 @@ if command -v docker >/dev/null 2>&1; then
     echo ""
     echo -e "${B}🐳 Docker reclaimable${N}"
     sudo docker system df 2>/dev/null | sed 's/^/   /'
+
+    # The figures above are misleading on a Kamal box and must not stand alone.
+    # Docker counts an image referenced ONLY by a stopped container as
+    # reclaimable, so a healthy rollback ladder reports as "100% reclaimable"
+    # gigabytes - free space, right above a prompt offering to reclaim it.
+    # Name what that number actually is before anyone is asked to spend it.
+    LADDER=$(sudo docker ps -a --filter label=role --filter status=exited \
+                --format '{{.Names}}|{{.Status}}' 2>/dev/null)
+
+    if [ -n "$LADDER" ]; then
+        echo ""
+        echo -e "${B}🔄 Kamal rollback ladder${N}"
+        echo -e "   $(printf '%s\n' "$LADDER" | grep -c .) retained release(s) - these are STOPPED CONTAINERS,"
+        echo -e "   so a blanket 'docker system prune' would delete them."
+        printf '%s\n' "$LADDER" | awk -F'|' 'NF{n=$1; if(length(n)>34) n=substr(n,1,34)"…"; printf "   %-36s %s\n", n, $2}'
+    fi
 fi
 
 echo ""
@@ -93,9 +122,16 @@ BEFORE=$(free_root)
 # 4. CLEANUP (guided - nothing runs unless you say yes)
 echo -e "\n🧹 ${C_INFO}Cleanup${C_RESET} - each step is opt-in (default No)."
 
+# 'docker system prune' is deliberately NOT used here. It bundles two very
+# different things behind a single yes: reclaiming dangling images, unused
+# networks and build cache (free - nothing depends on them), and deleting every
+# stopped container (on a Kamal box, the entire rollback ladder). Sharing one
+# keystroke between the harmless and the destructive is the bug; the split below
+# is the fix. Stopped containers now have their own gate in the danger zone.
 if [ "$HAS_DOCKER" = "1" ]; then
-    if confirm "Prune unused Docker data (dangling images, stopped containers, networks, build cache)?"; then
-        ssh -qn "$SELECTED_NAME" "sudo docker system prune -f"
+    if confirm "Prune dangling images, unused networks and build cache? (keeps every container)"; then
+        ssh -qn "$SELECTED_NAME" \
+            "sudo docker image prune -f && sudo docker network prune -f && sudo docker builder prune -f"
     fi
 fi
 
@@ -110,7 +146,21 @@ fi
 # Extra-guarded: pruning Docker volumes can DELETE app data. Default OFF, and
 # it takes two explicit confirmations before anything happens.
 if [ "$HAS_DOCKER" = "1" ]; then
-    echo -e "\n${C_ERROR}⚠️  DANGER ZONE${C_RESET} - the next one can delete data."
+    echo -e "\n${C_ERROR}⚠️  DANGER ZONE${C_RESET} - the next ones can delete data."
+
+    # Stopped containers, gated separately and only when there is a ladder to
+    # lose. The cost is NOT data: the images survive (they are tagged, so an
+    # image prune leaves them), and the app keeps running. What is lost is the
+    # INSTANT rollback - 'kamal rollback' checks that the container for a version
+    # still exists (cli/main.rb, container_available?) and refuses the version
+    # outright if it does not, turning a zero-download restart into a redeploy.
+    if [ "$LADDER_COUNT" -gt 0 ]; then
+        echo -e "${C_INFO}   ${LADDER_COUNT} stopped release container(s) present - Kamal's rollback ladder.${C_RESET}"
+        echo -e "${C_INFO}   Deleting them loses no data, but 'kamal rollback' stops being instant.${C_RESET}"
+        if confirm "Delete ALL stopped containers, including those ${LADDER_COUNT} release(s)?"; then
+            ssh -qn "$SELECTED_NAME" "sudo docker container prune -f"
+        fi
+    fi
     if confirm "Prune unused Docker VOLUMES? (can DELETE app data - e.g. an app's SQLite volume)"; then
         if confirm "Are you absolutely sure? This is irreversible"; then
             ssh -qn "$SELECTED_NAME" "sudo docker volume prune -f"
