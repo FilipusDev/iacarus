@@ -2,12 +2,9 @@
 
 # --- COLOR DEFINITIONS ---
 
-C_ERROR='\e[1;31m'      # Bold Red (Critical)
-C_SUCCESS='\e[1;32m'    # Bold Green (Success)
-C_WARN='\e[1;38;5;226m' # Bold Yellow
-C_INFO='\e[38;5;39m'    # Blue
-C_HIGH='\e[38;5;171m'   # Turquoise
-C_RESET='\e[0m'
+# Resolved from this file's own location so it works from any cwd, exactly like .env below.
+# Anything needing only colors should source palette.sh directly and skip everything after it.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/palette.sh"
 
 # --- TOOLKIT VERSIONS ---
 
