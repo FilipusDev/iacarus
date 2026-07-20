@@ -48,10 +48,16 @@ when the question is "is it slow for me?".
 | `make mon-box-*` | *…same, asked from the mon box* | `ssh` | the mon box |
 | `make vps-stats` (hetzner/) | *What did ONE box do over 5m/15m/30m/1h?* | `ssh` | sar on that box |
 
-> **Local `mon-hw` needs glances on THIS machine** (`pacman -S glances` /
-> `apt install glances`). `mon-box-hw` does not - the box already has it. Note
-> Arch ships glances 4.x while the boxes run 3.4; a 4.x client against 3.x
-> servers is untested here, so `mon-box-hw` is the safer daily driver.
+> **Local `mon-hw` needs glances on THIS machine, at the fleet's version.**
+> glances refuses to talk across a MAJOR version boundary - its client compares
+> majors and aborts the login - and the browser renders that refusal as a bare
+> `OFFLINE` row, indistinguishable from a dead box. Arch ships 4.x while the
+> boxes run 3.4.0.3, so a distro-installed client cannot read the fleet at all.
+>
+> Run **`make mon-glances-pin`** once. It builds a venv holding exactly
+> `GLANCES_VERSION` (`config.sh`) and `mon-hw` prefers it automatically; your
+> system glances is left untouched. `mon-box-hw` never needed this - the box
+> talks to itself.
 
 `mon-apps` is the one you leave running. `mon-hw` is what you open when
 `mon-apps` goes yellow or red and you want to know *why*.

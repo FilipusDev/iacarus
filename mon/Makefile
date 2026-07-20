@@ -18,6 +18,7 @@ REGISTER_SCRIPT := ./mon-register.sh
 APPS_SCRIPT     := ./mon-apps.sh
 HW_SCRIPT       := ./mon-hw.sh
 REMOTE_SCRIPT   := ./mon-remote.sh
+PIN_SCRIPT      := ./mon-glances-pin.sh
 
 help: ## Show this help message
 	@echo -e "\n$(C_HIGH)| 📡 MON | 🦅 IaCarus ${VERSION} - CONTROL PLANE$(C_RESET)"
@@ -36,6 +37,9 @@ mon-register: ## Hand-register an existing app (backfill; derives what it can)
 
 mon-hw: ## Live hardware board across the fleet (glances over SSH tunnels)
 	@$(HW_SCRIPT)
+
+mon-glances-pin: ## Pin this viewer's glances to the fleet's version (venv; run once)
+	@$(PIN_SCRIPT)
 
 mon-apps: ## Live app liveness + latency board (Ctrl-C to stop)
 	@$(APPS_SCRIPT)
@@ -56,4 +60,4 @@ mon-box-apps: ## App board, run on the mon box
 mon-box-apps-once: ## One app pass on the mon box (non-zero if anything is down)
 	@$(REMOTE_SCRIPT) mon-apps-once --no-tty
 
-.PHONY: help mon-check mon-list mon-register mon-hw mon-apps mon-apps-once mon-box-hw mon-box-apps mon-box-apps-once
+.PHONY: help mon-check mon-list mon-register mon-hw mon-glances-pin mon-apps mon-apps-once mon-box-hw mon-box-apps mon-box-apps-once

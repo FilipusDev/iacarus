@@ -10,6 +10,18 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/palette.sh"
 
 LITESTREAM_VERSION="v0.3.13"
 
+# glances speaks a client/server protocol that refuses to cross a MAJOR version
+# boundary, so the viewer and every box must agree - and "whatever each distro
+# packages" is not agreement. Ubuntu 24.04 ships exactly this build, which is
+# why the boxes can keep using apt; a rolling-release viewer cannot, and pins
+# itself to the same value with 'make mon-glances-pin'.
+GLANCES_VERSION="3.4.0.3"
+
+# Where that pinned viewer build lives. Outside the repo (it is a build artifact
+# of the operator's machine, not source), and keyed by version so changing the
+# pin above creates a NEW venv instead of silently reusing the old one.
+MON_GLANCES_VENV="${MON_GLANCES_VENV:-${HOME}/.local/share/iacarus/glances-${GLANCES_VERSION}}"
+
 # --- SOURCE ENV FILE ---
 
 # 1. Determine the Project Root (Where .env lives)

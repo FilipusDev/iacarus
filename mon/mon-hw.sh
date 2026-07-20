@@ -32,9 +32,20 @@ fi
 # 1. glances drives the UI here, so its absence is fatal - but it is a VIEWER
 #    dependency, not a box one, and installing software on the operator's
 #    machine is not this script's business. Say what to run and stop.
-if ! command -v glances > /dev/null 2>&1; then
+#    The PINNED build wins when present. 'make mon-glances-pin' puts a venv at
+#    MON_GLANCES_VENV holding exactly GLANCES_VERSION - the version the fleet
+#    speaks - so a viewer whose distro has rolled ahead still has one binary
+#    that can talk to the boxes. Falling back to the system glances keeps a
+#    machine that never ran the pin working exactly as before.
+if [ -x "${MON_GLANCES_VENV}/bin/glances" ]; then
+    GLANCES_BIN="${MON_GLANCES_VENV}/bin/glances"
+elif command -v glances > /dev/null 2>&1; then
+    GLANCES_BIN="glances"
+else
     echo -e "\n${C_ERROR}❌ glances is not installed on this machine.${C_RESET}"
     echo -e "${C_INFO}   The viewer needs it; the boxes already have it.${C_RESET}"
+    echo -e "${C_INFO}   Pinned to the fleet's version: ${C_RESET}${C_HIGH}make mon-glances-pin${C_RESET}"
+    echo -e "${C_INFO}   Or from your distro (may not match the fleet):${C_RESET}"
     echo -e "${C_INFO}   Arch:   ${C_RESET}${C_HIGH}sudo pacman -S glances${C_RESET}"
     echo -e "${C_INFO}   Ubuntu: ${C_RESET}${C_HIGH}sudo apt install glances${C_RESET}"
     echo ""
@@ -70,7 +81,7 @@ fi
 function glances_version_of() {
     # No args: read the LOCAL glances. One arg: read it on that box over ssh.
     if [ $# -eq 0 ]; then
-        glances --version 2>/dev/null
+        "$GLANCES_BIN" --version 2>/dev/null
     else
         ssh -n -o BatchMode=yes -o ConnectTimeout=8 "$1" 'glances --version 2>/dev/null' 2>/dev/null
     fi | grep -oE '[0-9]+\.[0-9]+[0-9.]*' | head -n 1
@@ -269,8 +280,8 @@ if [ "$SERVER_IDX" -eq 0 ]; then
     if [ "$MISMATCH_IDX" -gt 0 ]; then
         echo -e "\n${C_ERROR}❌ Every box runs a glances major this viewer cannot talk to.${C_RESET}"
         echo -e "${C_INFO}   The boxes are UP - glances refuses the connection, it is not an outage.${C_RESET}"
-        echo -e "${C_INFO}   This viewer has ${C_RESET}${C_HIGH}${LOCAL_GLANCES_VERSION}${C_RESET}${C_INFO}; the fleet ships whatever its distro packages.${C_RESET}"
-        echo -e "${C_INFO}   Match the majors on either end - e.g. a pinned glances in a venv here.${C_RESET}\n"
+        echo -e "${C_INFO}   This viewer has ${C_RESET}${C_HIGH}${LOCAL_GLANCES_VERSION}${C_RESET}${C_INFO}; the fleet speaks ${C_RESET}${C_HIGH}${GLANCES_VERSION}${C_RESET}${C_INFO}.${C_RESET}"
+        echo -e "${C_INFO}   Pin this viewer to match: ${C_RESET}${C_HIGH}make mon-glances-pin${C_RESET}\n"
     else
         echo -e "\n${C_ERROR}❌ No box could be reached - nothing to display.${C_RESET}"
         echo -e "${C_INFO}   Check 'make mon-check', then 'make vps-glances-enable' on the box.${C_RESET}\n"
@@ -306,7 +317,7 @@ GLANCES_RC=0
 # whenever it can't enumerate sockets (loopback server, unprivileged user) - so
 # ENTER on a box blanks the board and strands the cursor. The hardware board
 # doesn't show TCP-connection counts anyway; dropping the plugin is a clean fix.
-glances --browser --disable-plugin connections --config "$GLANCES_CONF" 2> "$GLANCES_ERR" || GLANCES_RC=$?
+"$GLANCES_BIN" --browser --disable-plugin connections --config "$GLANCES_CONF" 2> "$GLANCES_ERR" || GLANCES_RC=$?
 
 # glances 3.4.0.3 ALWAYS fails its own teardown. serve_forever() ends with
 # 'finally: self.end()', which calls curses.endwin() on a session curses has

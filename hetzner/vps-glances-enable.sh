@@ -28,7 +28,7 @@ echo -e "\n📈 Enabling the glances server on ${C_INFO}$SELECTED_NAME${C_RESET}
 echo "----------------------------------------"
 
 # 3. Remote install + pin + enable (idempotent)
-ssh -q -t "$SELECTED_NAME" 'bash -s' << 'EOF'
+ssh -q -t "$SELECTED_NAME" "GLANCES_VERSION='${GLANCES_VERSION}' bash -s" << 'EOF'
 
 # Remote Colors
 R='\033[1;31m'
@@ -86,6 +86,21 @@ fi
 
 if echo "$LISTEN" | grep -q '127.0.0.1:61209'; then
     echo -e "${G}✅ glances server listening on 127.0.0.1:61209 (loopback only).${N}"
+
+    # The version the box ended up with is part of the posture, because glances
+    # refuses to serve a client on a different MAJOR - so a box that is up and
+    # correctly bound can still be unreadable. apt on Ubuntu 24.04 ships the
+    # pinned build today; this catches the day it stops (a newer LTS, a backport)
+    # without pretending to fix it, since the right response depends on which
+    # end should move.
+    INSTALLED=$(glances --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+[0-9.]*' | head -n 1)
+
+    if [ -n "$GLANCES_VERSION" ] && [ "$INSTALLED" != "$GLANCES_VERSION" ]; then
+        echo -e "${Y}⚠️  This box has glances ${INSTALLED}, but the fleet pins ${GLANCES_VERSION}.${N}"
+        echo -e "${Y}   Viewers pinned with 'make mon-glances-pin' will refuse this box"
+        echo -e "${Y}   if the MAJOR differs. Re-pin the fleet or this box, deliberately.${N}"
+    fi
+
     echo -e "${Y}   Reach it with 'make mon-hw' - it opens the SSH tunnel for you.${N}"
 else
     echo -e "${R}❌ glances is NOT bound to loopback:${N}"
