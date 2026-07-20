@@ -1,5 +1,5 @@
 # --- VERSION CONTROL ---
-VERSION := v0.18.0
+VERSION := v0.18.1
 
 # --- COLORS (hand-matched to palette.sh — Make cannot source a shell file) ---
 C_ERROR   := \033[1;31m
