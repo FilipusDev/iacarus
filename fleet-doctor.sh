@@ -151,7 +151,32 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-# 5. Pinned versions — reminders only, never fatal
+# 5. iacarus's version is restated in prose — every copy must match config.mk
+# -----------------------------------------------------------------------------
+# config.mk is the single source; README.md and CLAUDE.md restate it for readers. Keeping them in
+# sync is a rule nobody remembers mid-bump: a `v0.13.2` sat in CLAUDE.md through three releases.
+echo -e "\n${C_HIGH}▶ Version restatement${C_RESET}"
+declared="$(sed -nE 's/^VERSION := (v[0-9]+\.[0-9]+\.[0-9]+).*/\1/p' "${SCRIPT_DIR}/config.mk")"
+if [ -z "$declared" ]; then
+  fail "config.mk declares no VERSION"
+else
+  # Only the two files iacarus/CLAUDE.md names as the version artifact. A version string anywhere
+  # else — a changelog, an ADR, a tag list — is history and must NOT be rewritten to match.
+  stale=0
+  for f in "${SCRIPT_DIR}/README.md" "${SCRIPT_DIR}/CLAUDE.md"; do
+    [ -f "$f" ] || { fail "${f#$ROOT/} missing"; stale=1; continue; }
+    while IFS= read -r hit; do
+      [ -z "$hit" ] && continue
+      found="${hit#*:}"; found="${found//\`/}"
+      [ "$found" = "$declared" ] \
+        || { fail "${f#$ROOT/}:${hit%%:*} says $found, config.mk says $declared"; stale=1; }
+    done <<< "$(grep -noE '`v[0-9]+\.[0-9]+\.[0-9]+`' "$f")"
+  done
+  [ "$stale" = "0" ] && pass "$declared restated consistently in README.md, CLAUDE.md"
+fi
+
+# -----------------------------------------------------------------------------
+# 6. Pinned versions — reminders only, never fatal
 # -----------------------------------------------------------------------------
 if [ "$CHECK_ONLY" != "1" ]; then
   echo -e "\n${C_HIGH}▶ Pinned versions${C_RESET}  ${C_INFO}(reminders — never affect exit code)${C_RESET}"
