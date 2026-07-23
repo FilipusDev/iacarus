@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 #
-# fleet-doctor — checks the invariants that span all four repos, and reminds you about pinned
-# versions. Read-only: it never edits a file, never touches a box, never calls a provider API.
+# fleet-doctor — checks the invariants that span the fleet's repos (workspace siblings plus the
+# external mpl), and reminds you about pinned versions. Read-only: it never edits a file, never
+# touches a box, never calls a provider API.
 #
 # It exists because every documentation drift found so far shared one shape: a doc restated a fact
 # that lived somewhere else, and nothing noticed when the two diverged. Those are all mechanically
@@ -53,27 +54,43 @@ md_files() {
 echo -e "\n🩺 ${C_HIGH}fleet-doctor${C_RESET} — ${ROOT}"
 
 # -----------------------------------------------------------------------------
-# 1. The common core must be byte-identical everywhere
+# 1. The common core is single-sourced in daedalus and imported everywhere
 # -----------------------------------------------------------------------------
-echo -e "\n${C_HIGH}▶ Common core${C_RESET}"
-core_files=("$ROOT/CLAUDE.md" "$ROOT/iacarus/CLAUDE.md" "$ROOT/daedalus/CLAUDE.md" \
-            "$ROOT/_template_rails-app/CLAUDE.md")
-[ -n "$(mpl_dir)" ] && core_files+=("$(mpl_dir)/CLAUDE.md")
+# v1 duplicated the block byte-identically and hashed the copies to catch drift — and still
+# missed argus, which was never added to the file list. ADR-0010 replaced the copies with one
+# canonical file and an @import per repo, so the doctor now proves the plumbing instead: the
+# symlinks resolve into daedalus, every consumer carries the import line, and no duplicated
+# block survives to shadow the canonical file with stale rules.
+echo -e "\n${C_HIGH}▶ Common core (single-source, ADR-0010)${C_RESET}"
 
-declare -A seen=()
-missing=0
-for f in "${core_files[@]}"; do
-  [ -f "$f" ] || { fail "missing: ${f#$ROOT/}"; missing=1; continue; }
-  h="$(awk '/FLEET-COMMON-CORE v1/,/\/FLEET-COMMON-CORE/' "$f" | sha256sum | cut -c1-12)"
-  [ "$h" = "e3b0c44298fc" ] || [ -z "$h" ] && { fail "no core block in ${f#$ROOT/}"; continue; }
-  seen["$h"]+="${f#$ROOT/} "
+[ -f "$ROOT/daedalus/FLEET-CORE.md" ] \
+  && pass "daedalus/FLEET-CORE.md exists" \
+  || fail "daedalus/FLEET-CORE.md missing — the canonical core"
+
+for pair in "fleet-core.md:FLEET-CORE.md" "fleet-decisions:decisions" "fleet-learning:learning"; do
+  link="${pair%%:*}"; target="${pair#*:}"
+  actual="$(readlink "$HOME/.claude/$link" 2>/dev/null)"
+  [ "$actual" = "$ROOT/daedalus/$target" ] \
+    && pass "~/.claude/$link → daedalus/$target" \
+    || fail "~/.claude/$link → ${actual:-nothing} (expected $ROOT/daedalus/$target)"
 done
-if [ "$missing" = "0" ] && [ "${#seen[@]}" = "1" ]; then
-  pass "identical in ${#core_files[@]} files (${!seen[*]})"
-elif [ "${#seen[@]}" -gt 1 ]; then
-  fail "DIVERGED into ${#seen[@]} variants:"
-  for h in "${!seen[@]}"; do echo -e "      ${C_WARN}${h}${C_RESET}  ${seen[$h]}"; done
-fi
+
+core_files=("$ROOT/CLAUDE.md" "$ROOT/iacarus/CLAUDE.md" "$ROOT/daedalus/CLAUDE.md" \
+            "$ROOT/argus/CLAUDE.md" "$ROOT/_template_rails-app/CLAUDE.md")
+[ -n "$(mpl_dir)" ] && core_files+=("$(mpl_dir)/CLAUDE.md")
+for f in "${core_files[@]}"; do
+  if [ ! -f "$f" ]; then fail "missing: ${f#$ROOT/}"
+  elif grep -qx '@~/.claude/fleet-core.md' "$f"; then pass "import line in ${f#$ROOT/}"
+  else fail "no '@~/.claude/fleet-core.md' import line in ${f#$ROOT/}"
+  fi
+done
+
+# The marker comments existed only in real duplicated blocks, so their arrow form is the one
+# string prose never legitimately repeats (ADR-0010 discusses the block without it).
+leftover="$(md_files | xargs grep -l 'FLEET-COMMON-CORE.*-->' 2>/dev/null | sed "s|$ROOT/||; s|$HOME/|~/|")"
+[ -z "$leftover" ] \
+  && pass "no duplicated core block survives anywhere" \
+  || fail "stale FLEET-COMMON-CORE block in: $(echo "$leftover" | paste -sd' ')"
 
 # -----------------------------------------------------------------------------
 # 2. Retired concepts must not be taught anywhere
@@ -127,6 +144,13 @@ echo -e "\n${C_HIGH}▶ Required artifacts${C_RESET}"
 for f in daedalus/SCHEMA.md daedalus/RUNBOOK.md; do
   [ -f "$ROOT/$f" ] && pass "$f" || fail "$f missing"
 done
+# Every repo carries a CHANGELOG.md (Fleet Core git rule): versioned repos roll Unreleased into
+# version sections at each bump; describing repos head entries with the merge date.
+for r in iacarus daedalus argus _template_rails-app; do
+  [ -f "$ROOT/$r/CHANGELOG.md" ] && pass "$r/CHANGELOG.md" || fail "$r/CHANGELOG.md missing"
+done
+[ -n "$(mpl_dir)" ] && { [ -f "$(mpl_dir)/CHANGELOG.md" ] && pass "mpl/CHANGELOG.md" \
+  || fail "mpl/CHANGELOG.md missing"; }
 
 # -----------------------------------------------------------------------------
 # 4. Every op:// reference in a tracked file must resolve
