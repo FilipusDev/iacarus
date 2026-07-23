@@ -4,7 +4,7 @@ Format: [Keep a Changelog](https://keepachangelog.com/). `Unreleased` accumulate
 commit rolls it into a `vX.Y.Z` section (Fleet Common Core). Sections at and below v0.20.0 are
 seeded from the annotated tags that predate this file.
 
-## Unreleased
+## v0.21.0 — doctor proves the single-source fleet core
 
 ### Changed
 
