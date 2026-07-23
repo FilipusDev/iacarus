@@ -8,16 +8,17 @@ inspired by the "The One Person Framework" [article](https://world.hey.com/dhh/t
 Please read this `README` from top to bottom. (Yes, really 😅).
 If you prefer debugging for 2 hours to save 5 minutes of reading -> go to [TL;DR](#🦥-tldr).
 
-Currently (`v0.20.0`) it automates the provisioning of hardened **Hetzner VPS**
+Currently (`v0.21.0`) it automates the provisioning of hardened **Hetzner VPS**
 servers, and **Cloudflare R2** storage buckets using simple Bash scripts and Makefiles.
 
 ## 🗺️ TODO
 
-Monitoring the server (disk pruning of logs/docker crap) plus near-online
-observability across the fleet is planned and tracked in
-[`BACKLOG.md`](./BACKLOG.md). **SPRINT A** (on-box `vps-stats` / `vps-doctor`)
-and **SPRINT B** (the TUI monitoring box) are both **done** - day-to-day usage
-lives in [`mon/OPERATING.md`](./mon/OPERATING.md).
+Fleet monitoring is **being carved out of this repo** into **Argus** (a Rails hub for
+synthetic HTTP checks and box telemetry) and **Talos** (a Go push agent) — see
+ADR-0008/0009 in `daedalus/decisions/`. Until that cutover completes, `mon/` still
+operates the terminal board; day-to-day usage lives in
+[`mon/OPERATING.md`](./mon/OPERATING.md). Remaining local work is tracked in
+[`BACKLOG.md`](./BACKLOG.md).
 
 ## 🦥 TL;DR
 
@@ -55,7 +56,7 @@ tier - check the [Hetzner console](https://console.hetzner.cloud) for
 updated availability, since server types come and go over time.
 We're talking about a few bucks (USD) cheap. Per VPS!
 
-As of now (`v0.20.0`) you'll need 2 accounts: one for Hetzner and one for Cloudflare.
+As of now (`v0.21.0`) you'll need 2 accounts: one for Hetzner and one for Cloudflare.
 
 At Hetzner, we'll manage server boxes (VPS).
 At Cloudflare, we'll manage Zero Trust tunnels and R2 storage buckets.
