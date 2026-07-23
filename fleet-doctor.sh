@@ -313,6 +313,9 @@ while IFS= read -r hit; do
   [ -z "$hit" ] && continue
   file="${hit%%:*}"; rest="${hit#*:}"; line="${rest%%:*}"; text="${rest#*:}"
   tgt="$(sed -E 's/.*\bmake ([a-z][a-z0-9_-]*).*/\1/' <<< "$text")"
+  # English prose also says "make it", "make sure", "make this" — words, not targets. A real
+  # target will never collide with these; a stopword here can only silence a false failure.
+  case "$tgt" in it|this|that|these|those|them|sure|sense|the|a|an|one|no|any|every|everything|way|use|room|good|is|up) continue ;; esac
   # `make mon-box-*` and `make <target>` document a shape rather than naming one target.
   grep -qE "\bmake ${tgt}[*<]" <<< "$text" && continue
   if [ -z "${target_dirs[$tgt]+x}" ]; then
