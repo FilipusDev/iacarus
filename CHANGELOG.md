@@ -12,6 +12,8 @@ seeded from the annotated tags that predate this file.
   symlinks resolve into daedalus, every consumer `CLAUDE.md` carries the
   `@~/.claude/fleet-core.md` import line (argus included — v1's hash check had never been
   taught about it), no duplicated block survives, and every repo carries a `CHANGELOG.md`.
+- `fleet-doctor` no longer reads English prose ("make it", "make this") as documented
+  make-targets — a stopword guard keeps the check quiet enough to trust.
 - `CLAUDE.md` — the duplicated Fleet Common Core block replaced by the import line (ADR-0010).
 - `README.md` — the monitoring TODO now points at the Argus/Talos carve-out (ADR-0008/0009)
   instead of the finished mon sprints.
@@ -26,7 +28,7 @@ seeded from the annotated tags that predate this file.
 
 ## v0.18.1 — config resolves from its own location and fails loudly
 
-## v0.18.0 — doctor resolves make targets against the dir docs name
+## v0.18.0 — doctor resolves documented make-targets against the dir docs name
 
 ## v0.17.0 — doctor catches restated facts that drift
 
