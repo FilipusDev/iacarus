@@ -13,11 +13,12 @@ servers, and **Cloudflare R2** storage buckets using simple Bash scripts and Mak
 
 ## 🗺️ TODO
 
-Monitoring the server (disk pruning of logs/docker crap) plus near-online
-observability across the fleet is planned and tracked in
-[`BACKLOG.md`](./BACKLOG.md). **SPRINT A** (on-box `vps-stats` / `vps-doctor`)
-and **SPRINT B** (the TUI monitoring box) are both **done** - day-to-day usage
-lives in [`mon/OPERATING.md`](./mon/OPERATING.md).
+Fleet monitoring is **being carved out of this repo** into **Argus** (a Rails hub for
+synthetic HTTP checks and box telemetry) and **Talos** (a Go push agent) — see
+ADR-0008/0009 in `daedalus/decisions/`. Until that cutover completes, `mon/` still
+operates the terminal board; day-to-day usage lives in
+[`mon/OPERATING.md`](./mon/OPERATING.md). Remaining local work is tracked in
+[`BACKLOG.md`](./BACKLOG.md).
 
 ## 🦥 TL;DR
 
